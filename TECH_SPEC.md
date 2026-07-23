@@ -184,19 +184,22 @@ Every stage boundary is either **explicit** (machine-enforced; violation fails t
 
 ---
 
-## 8. Omni semantic model (design notes — LOCKED B12)
+## 8. Omni semantic model (B12)
 
-**What Omni's model is (verified from docs):** a semantic layer over the warehouse, in **three layers** — _schema model_ (auto-generated from the warehouse, inferred joins/keys) → _shared model_ (governed, org-wide metric definitions) → _workbook model_ (ad-hoc, extends shared). Signature feature: metrics built while exploring a workbook can be **promoted** up into the shared model (and down into the DB schema) — live/bidirectional, unlike static LookML. Building blocks: **Topics** (curate joined **views** into a query starting point), **views**, **fields** split into **dimensions** + **measures**, auto-inferred **joins**.
+**What ships:** a hand-authored model in Omni's model-IDE file layout, over the contracted `marts.top_backlink_opportunities` table:
 
-**dbt relationship:** the dbt integration is a **one-way import** (Omni ingests dbt semantic models/metrics; it does _not_ push Omni metrics back to dbt). → Our story: **dbt owns the transforms/marts; Omni models directly on top.** We do _not_ author metrics in dbt's semantic layer.
+```
+omni/
+├── views/top_backlink_opportunities.view   14 dimensions · 5 measures
+├── topics/backlink_opportunities.topic     curated query entry point
+└── README.md                               equivalent-SQL audit + connect path
+```
 
-**Our build (B12):** hand-write **one faithful Omni Topic** over the top-25 mart (can't connect Omni to a laptop DuckDB). Shape = **degenerate star / one wide mart** (one row per referring domain): dimensions `domain, category, opportunity_type, tld, authority_bucket`; measures `referring_domain_count, avg_authority, consensus`; opportunity **score** as a metric; a filter reproducing the top-25. Clean, well-named mart columns ⇒ better Omni model (Omni auto-generates from schema — reinforces B11 mart discipline).
+**Design.** One topic over one wide view, deliberately: a 25-row mart is a degenerate star, and more files would add surface area for format errors, not value. dbt owns all transforms — Omni's dbt integration is a one-way import, so the semantic layer is authored in Omni's format, not dbt's — and in Omni's three-layer terms these files are the governed *shared-model* curation over the schema model Omni would auto-generate from `marts`. The view exposes every mart column with labels and groups, adds two derived dimensions (`tld`, `authority_bucket`), five measures including a filtered measure (`integrations_page_count`), and `ai_context` on both files phrased for the questions Growth would ask the Omni Agent.
 
-**Validation approach (LOCKED = A):** No live Omni instance by default (hosted Omni can't reach a local DuckDB file). Validity rests on: (1) the dbt marts the model sits on are runnable + **tested** (objective data validation); (2) model-as-code grounded in Omni's real syntax — the reviewers are Omni; (3) each measure/dimension carries its **equivalent SQL** for line-by-line audit against the marts; (4) optional CI lint if Omni ships a validator. **Stretch (B): deliberately not pursued** — a live Omni instance connected to MotherDuck with import screenshots remains the strongest possible proof, but validation A stands on its own; now §9 priority 3 instead of half-shipping it.
+**Fidelity.** Every parameter used — `primary_key`, `group_label`, `sql` with `${field}` references, `format`, `aggregate_type`, filtered-measure `filters`, `base_view`, `default_row_limit`, `ai_context` — was verified against Omni's parameter references (docs.omni.co) before writing; no syntax from memory.
 
-**Build-time:** pull Omni's exact modeling YAML syntax from docs — do **not** hand-write from memory.
-
-**✅ BUILT:** `omni/` — `views/top_backlink_opportunities.view` (14 dimensions incl. derived `tld` + `authority_bucket`; 5 measures incl. a filtered measure; `primary_key`, `group_label`, `format`, `ai_context` — every parameter verified against Omni's parameter references) + `topics/backlink_opportunities.topic` (`base_view`, `default_row_limit: 25`, curated `fields`, AI context) + `omni/README.md` (three-layer mapping, MotherDuck connect path, live-verified equivalent-SQL audit table). YAML validity + audit SQL verified against the warehouse (25 rows · avg score 0.534 · 17 integrations-page motions). Refs: `docs.omni.co/modeling`, `/modeling/develop/model-generation`, `/integrations/dbt/semantic-layer`.
+**Validation (no live instance required).** (1) The numbers are proven upstream — the mart is dbt-built, tested, and contract-enforced; the semantic layer only adds meaning. (2) Every measure and derived dimension carries an equivalent-SQL translation, executed live against the warehouse (`omni/README.md`). (3) The connect path is real: point Omni at the MotherDuck target (`dbt/profiles.yml`, one line) and it generates its schema model from the same marts — a live import was deliberately deferred (§9 priority 3).
 
 ---
 
