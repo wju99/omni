@@ -244,7 +244,7 @@ def _render_md(top, footprint, funnel, exclusions) -> str:
     out("## Known limitations")
     out("")
     out("- Classification is **name + link-signal based** (no page"
-        " fetch at MVP); a week-1 upgrade grounds the LLM with"
+        " fetch at MVP); a future upgrade grounds the LLM with"
         " homepage titles/descriptions.")
     out("- The LLM competitor rule was violated in 2 of 150"
         " classifications despite an explicit closed list"

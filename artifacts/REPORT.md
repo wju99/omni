@@ -78,7 +78,7 @@ High-authority domains in the gap that were **cut on actionability** — a remin
 
 ## Known limitations
 
-- Classification is **name + link-signal based** (no page fetch at MVP); a week-1 upgrade grounds the LLM with homepage titles/descriptions.
+- Classification is **name + link-signal based** (no page fetch at MVP); a future upgrade grounds the LLM with homepage titles/descriptions.
 - The LLM competitor rule was violated in 2 of 150 classifications despite an explicit closed list (98.7% compliance) — documented in the Tech Spec; human review of 25 rows is the backstop.
 - Link *presence* comes from the crawl window; a link dropped after June 2026 may persist until the next release refresh.
 

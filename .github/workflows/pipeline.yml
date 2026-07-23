@@ -16,7 +16,7 @@
 # failed scheduled run needs no special recovery: the next
 # invocation resumes from the first incomplete unit. Picking up a
 # NEW crawl release = bump RELEASE in pipeline/config.py
-# (auto-discovery is a week-1 item; see TECH_SPEC.md §12).
+# (release auto-discovery is deliberately deferred future work).
 
 name: backlink-pipeline
 

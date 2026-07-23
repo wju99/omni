@@ -61,7 +61,7 @@ free Omni instance + MotherDuck import with screenshots.
 
 - **One topic, one view — deliberately** (spec B12): a 25-row wide
   mart is a degenerate star; more files would add surface area for
-  format errors, not value. Week-1: a second topic over the full
+  format errors, not value. Future improvement: a second topic over the full
   3,008-row gap set with a join for drill-down.
 - `ai_context` on both files targets Omni's AI/agent features —
   the topic is phrased for the questions Growth would actually ask.

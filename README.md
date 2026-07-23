@@ -213,5 +213,5 @@ works as-is.
 **Complete.** All seven build steps and all six brief deliverables
 are shipped; the full build log — including the LLM prompt
 iteration story (v1 → v2 → v2.1, regression gate, human overrides)
-— is in [TECH_SPEC.md](TECH_SPEC.md) §9, with the
-implemented / out-of-scope / hours-vs-week statement in §12.
+— is in [TECH_SPEC.md](TECH_SPEC.md) §9; deliverables in §12,
+if-I-had-a-week priorities in §10, out of scope in §11.
