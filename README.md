@@ -22,7 +22,7 @@ Full design rationale, decision log, and contracts:
 |---|---|
 | ETL framework + code | [`pipeline/`](pipeline/) (Python: extract, transform, enrich stages + retry manifest) |
 | dbt project | [`dbt/`](dbt/) (staging → intermediate → marts; tests + enforced contract) |
-| Omni semantic model | *lands in build step 6 — see spec §9* |
+| Omni semantic model | [`omni/`](omni/) — view + topic in Omni's model-IDE layout, with an equivalent-SQL audit ([omni/README.md](omni/README.md)) |
 | Top-25 report | [`artifacts/REPORT.md`](artifacts/REPORT.md) (human) + [`artifacts/top_25_report.csv`](artifacts/top_25_report.csv) (machine) |
 | Tech Spec | [`TECH_SPEC_DRAFT.md`](TECH_SPEC_DRAFT.md) |
 

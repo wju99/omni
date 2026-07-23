@@ -1,0 +1,24 @@
+# Omni topic file (model IDE: topics/backlink_opportunities.topic)
+# Syntax per docs.omni.co/modeling/topics/setup and
+# /modeling/topics/parameters.
+
+base_view: top_backlink_opportunities
+label: Backlink Opportunities
+group_label: Growth Marketing
+description: >-
+  Which high-value backlink opportunities should Omni investigate,
+  based on competitor backlink patterns? Curated top-25 referring
+  domains from the Common Crawl gap analysis — filter by category,
+  opportunity type, or authority bucket; every row carries a
+  rationale.
+default_row_limit: 25
+fields: [top_backlink_opportunities.*]
+ai_context: |
+  You are helping Omni's Growth Marketing team work a backlink
+  outreach list. Each row is a domain that links to Omni's
+  competitors (Sigma, Hex, Mode, Metabase) but not to Omni.
+  Typical questions: which integration-page opportunities have the
+  best authority? how many opportunities per category? what is the
+  average consensus of the top bucket? Use opportunity_score to
+  rank, authority_bucket to segment, and rationale to explain a
+  specific domain.

@@ -1,0 +1,143 @@
+# Omni view file (model IDE: views/top_backlink_opportunities.view)
+# The view name is implicit in the file name; syntax per
+# docs.omni.co/modeling/views, /modeling/dimensions, /modeling/measures.
+
+schema: marts
+table_name: top_backlink_opportunities
+label: Backlink Opportunities (Top 25)
+description: >-
+  Referring domains that link to Omni's competitors (Sigma, Hex,
+  Mode, Metabase) but not to Omni — scored, relevance-gated, and
+  capped at 25 by the backlink gap pipeline. One row per referring
+  domain. Rebuilt on each pipeline run from the Common Crawl domain
+  webgraph.
+ai_context: |
+  Each row is a backlink outreach target for the Growth Marketing
+  team: a domain that already links to at least one of Omni's four
+  tracked competitors but does not link to omni.co. Higher
+  opportunity_score = more competitor consensus and better Common
+  Crawl authority. rationale explains why the domain is relevant;
+  opportunity_type describes the outreach motion.
+
+dimensions:
+  domain:
+    label: Referring Domain
+    primary_key: true
+    description: >-
+      Registered domain (subdomains aggregated) that links to
+      competitors but not to Omni.
+
+  category:
+    label: Domain Category
+    group_label: Classification
+    description: >-
+      LLM-assigned category (e.g. data_platform_vendor,
+      tech_media_or_blog), human-overridable.
+
+  opportunity_type:
+    label: Opportunity Type
+    group_label: Classification
+    description: >-
+      The outreach motion: integrations_page, directory_listing,
+      content_mention, guest_content, comparison_or_alternatives,
+      partner_program.
+
+  rationale:
+    label: Why It Matters
+    group_label: Classification
+    description: One-sentence outreach rationale per domain.
+
+  competitor_consensus:
+    label: Competitor Consensus (of 4)
+    group_label: Link Signals
+    description: >-
+      How many of the four competitors this domain links to.
+
+  links_to_sigma:
+    label: Links to Sigma
+    group_label: Link Signals
+
+  links_to_hex:
+    label: Links to Hex
+    group_label: Link Signals
+
+  links_to_mode:
+    label: Links to Mode
+    group_label: Link Signals
+
+  links_to_metabase:
+    label: Links to Metabase
+    group_label: Link Signals
+
+  harmonic_pos:
+    label: Authority Rank (Harmonic)
+    group_label: Authority
+    format: '#,##0'
+    description: >-
+      Common Crawl harmonic-centrality rank; lower = more
+      authoritative (~121M domains ranked).
+
+  pagerank_pos:
+    label: Authority Rank (PageRank)
+    group_label: Authority
+    format: '#,##0'
+
+  opportunity_score:
+    label: Opportunity Score
+    format: '0.000'
+    description: >-
+      Weighted blend of competitor consensus and Common Crawl
+      authority, in [0, 1]. Ranking is fully deterministic — the
+      LLM only gates relevance, never orders the list.
+
+  tld:
+    label: TLD
+    sql: REGEXP_EXTRACT(${domain}, '([^.]+)$')
+    description: Top-level domain, derived from the domain.
+
+  authority_bucket:
+    label: Authority Bucket
+    group_label: Authority
+    sql: |-
+      CASE
+        WHEN ${harmonic_pos} <= 10000 THEN '1 - Elite (top 10K)'
+        WHEN ${harmonic_pos} <= 100000 THEN '2 - Strong (10K-100K)'
+        WHEN ${harmonic_pos} <= 1000000 THEN '3 - Moderate (100K-1M)'
+        ELSE '4 - Deep (>1M)'
+      END
+    description: Harmonic-centrality rank, bucketed for grouping.
+
+measures:
+  opportunity_count:
+    label: Opportunities
+    aggregate_type: count
+    description: Number of recommended referring domains.
+
+  avg_opportunity_score:
+    label: Avg Opportunity Score
+    sql: ${opportunity_score}
+    aggregate_type: average
+    format: '0.000'
+
+  avg_consensus:
+    label: Avg Competitor Consensus
+    sql: ${competitor_consensus}
+    aggregate_type: average
+    format: '0.00'
+
+  best_authority_rank:
+    label: Best Authority Rank
+    sql: ${harmonic_pos}
+    aggregate_type: min
+    format: '#,##0'
+    description: The strongest (lowest) authority rank in the group.
+
+  integrations_page_count:
+    label: Integration-Page Opportunities
+    aggregate_type: count
+    filters:
+      opportunity_type:
+        is: integrations_page
+    description: >-
+      Opportunities actioned via an integrations/destinations
+      directory pitch — the dominant motion in this list.
