@@ -71,11 +71,14 @@ _RESPONSE_SCHEMA = {
     "additionalProperties": False,
 }
 
-# Prompt v2: explicit competitor list (strict exclude), partner rule
-# for adjacent data-stack vendors, firmer content-farm rule. v1
-# improvised the competitor boundary and wrongly killed ELT partners
-# (fivetran.com, airbyte.com) — see spec §6 / git history of
-# artifacts/enrichment_cache.csv for the v1 -> v2 diff.
+# Prompt v2.1. Iteration log (each cache version committed, so every
+# change is diffable in git history of artifacts/enrichment_cache.csv):
+#   v1   — improvised the competitor boundary; wrongly killed ELT
+#          partners (fivetran.com, airbyte.com).
+#   v2   — strict closed competitor list + partner rule + farm rule.
+#   v2.1 — INVESTOR RULE: human spot-check caught bvp.com labeled a
+#          submittable directory; VC links are portfolio pages or
+#          editorial market reports — not outreachable.
 _SYSTEM_PROMPT = (
     "You are a growth-marketing analyst for Omni (omni.co), a "
     "business-intelligence and analytics platform. You evaluate "
@@ -100,6 +103,13 @@ _SYSTEM_PROMPT = (
     "complementary PARTNERS, not competitors. Their integration/"
     "destination directories routinely list BI tools; these are "
     "typically strong opportunities.\n"
+    "INVESTOR RULE: venture-capital and investor domains (e.g. "
+    "Bessemer/bvp.com, a16z.com, Sequoia, Y Combinator) link to "
+    "vendors only via portfolio pages (closed to non-portfolio "
+    "companies) or editorial market reports and annual lists — "
+    "never open, submittable directories. They are not outreach "
+    "targets: is_relevant=false, category=other, "
+    "opportunity_type=not_applicable.\n"
     "JUNK RULE: programmatic content farms — auto-generated "
     "statistics pages, thin listicles, scraped directories with no "
     "editorial curation — are is_relevant=false (junk_or_spam or "
