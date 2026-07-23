@@ -13,6 +13,11 @@ blogspot.com,blog host
 medium.com,blog host
 github.com,code host
 github.io,code host pages
+herokuapp.com,paas wildcard host
+netlify.app,paas wildcard host
+vercel.app,paas wildcard host
+web.app,paas wildcard host
+pages.dev,paas wildcard host
 google.com,search utility
 apple.com,platform vendor
 microsoft.com,platform vendor

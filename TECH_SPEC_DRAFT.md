@@ -178,8 +178,8 @@ _Numbered stages = runtime data flow. Red nodes = the two flaky external seams; 
 Scoping complete (B1–B16). Proposed build order:
 
 1. ✅ **Scaffold** — DONE: `pipeline/` package (config · db + manifest · CLI), `pyproject` + `uv.lock` (Python pinned 3.12 for dbt compat), Makefile, `.env.example`, manifest tests green. Found: DuckDB rejects bare `current_timestamp` inside `ON CONFLICT DO UPDATE SET` → use `now()`.
-2. **Extract + Load** — download `cc-main-2026-apr-may-jun` webgraph from CC S3, filter to in-edges of the 5 targets, load into DuckDB `raw` schema; `pipeline_manifest` claim-a-row + resume (B9).
-3. **dbt** — staging → intermediate → marts; tests + top-25 contract + the "no gap domain links to omni" singular test (B11). *Teach-as-we-go.*
+2. ✅ **Extract + Load** — DONE 2026-07-22: 17.9 GB in 64 MiB manifest-tracked chunks; loads: vertices **121,091,933** · ranks **121,091,933** · target_edges **4,925** (≈2B-edge streaming scan, 141 s) · target coverage all 6 domains OK.
+3. ✅ **dbt** — DONE: **40/40 nodes green** (incl. thesis test). Observed: referrers metabase 1,809 / mode 1,242 / hex 838 / sigma 738 / **omni 265** (≈1/7th of Metabase — the headline stat); funnel 4,023 unique referrers → 3,758 raw gap → **3,008** after filters; consensus histogram 31×4 / 73×3 / 243×2 / 2,664×1; pre-enrichment top-25 = modern-data-stack ecosystem (YC, Fivetran, Airbyte, Atlan, Monte Carlo…) + visible aggregator junk → validates the LLM relevance gate (31 consensus-4 domains > 25 slots). Seed tweak: PaaS wildcard hosts (herokuapp/netlify.app/vercel.app/web.app/pages.dev) excluded — principle: seeds = structural exclusions, LLM = content judgment.
 4. **Enrich** — heuristic shortlist → Haiku 4.5 structured-outputs → cache-by-domain table (B8).
 5. **Publish** — top-25 CSV + Markdown report w/ per-domain rationale + action (B13).
 6. **Omni model** — one faithful Topic over the top-25 mart; pull exact YAML syntax from Omni docs (B12).
