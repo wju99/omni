@@ -14,7 +14,7 @@ consensus × authority, gates them through a bounded LLM relevance
 pass, and publishes a top-25 opportunity list for Growth Marketing.
 
 Full design rationale, decision log, and contracts:
-**[TECH_SPEC_DRAFT.md](TECH_SPEC_DRAFT.md)**.
+**[TECH_SPEC.md](TECH_SPEC.md)**.
 
 ## Deliverables map
 
@@ -24,7 +24,7 @@ Full design rationale, decision log, and contracts:
 | dbt project | [`dbt/`](dbt/) (staging → intermediate → marts; tests + enforced contract) |
 | Omni semantic model | [`omni/`](omni/) — view + topic in Omni's model-IDE layout, with an equivalent-SQL audit ([omni/README.md](omni/README.md)) |
 | Top-25 report | [`artifacts/REPORT.md`](artifacts/REPORT.md) (human) + [`artifacts/top_25_report.csv`](artifacts/top_25_report.csv) (machine) |
-| Tech Spec | [`TECH_SPEC_DRAFT.md`](TECH_SPEC_DRAFT.md) |
+| Tech Spec | [`TECH_SPEC.md`](TECH_SPEC.md) |
 
 ## Prerequisites
 
@@ -76,6 +76,8 @@ domains costs **~$0.10–0.50, one-time** (cache-by-domain thereafter).
 | `make extract` | Download webgraph (64 MiB resumable chunks) + load `raw.*` into DuckDB |
 | `make transform` | `dbt build` — seeds, 9 models, 29 tests, enforced contract |
 | `make enrich` | LLM relevance/category pass (DRY RUN without key) |
+| `make report` | Regenerate `artifacts/` top-25 CSV + REPORT.md |
+| `make reclassify` | Wipe the LLM cache + re-classify from scratch (~$0.15) |
 | `make status` | Manifest progress + warehouse table counts |
 | `make test` | Python unit tests (manifest, chunking, cache round-trip) |
 | `make clean-db` | Drop the warehouse file (downloads are kept) |
@@ -132,11 +134,29 @@ pipeline/            Python package: config, DuckDB + manifest, stages
   enrich.py          Haiku 4.5 structured-outputs classification + cache
 dbt/                 dbt project (profiles.yml: local dev / MotherDuck prod)
 tests/               pytest suite
+omni/                Omni semantic model (view + topic + audit README)
 artifacts/           committed pipeline outputs (enrichment cache, report)
 data/                gitignored: 17.9 GB downloads + omni.duckdb warehouse
+.github/workflows/   gated monthly cron for the recurring run
 Makefile             the operator interface
-TECH_SPEC_DRAFT.md   decision log + contracts + tradeoffs + recovery semantics
+TECH_SPEC.md         decision log + contracts + tradeoffs + recovery semantics
 ```
+
+## Scheduling (the recurring-pipeline story)
+
+Every command is idempotent and manifest-checkpointed, so
+"scheduled" simply means "re-invoked": a failed run needs no special
+recovery — the next invocation resumes at the first incomplete unit.
+
+The committed [GitHub Actions workflow](.github/workflows/pipeline.yml)
+runs monthly (CC webgraph cadence). The schedule is **gated behind
+the repo variable `PIPELINE_SCHEDULE_ENABLED`** — deliberately,
+because the 18 GB download exceeds GitHub-hosted runner disk; enable
+it on a self-hosted runner or with the MotherDuck `prod` target
+([dbt/profiles.yml](dbt/profiles.yml)). Manual runs:
+Actions → backlink-pipeline → *Run workflow* (works keyless via the
+DRY RUN path). Locally, any scheduler that can invoke `make run`
+works as-is.
 
 ## Runtime & cost (observed)
 
@@ -149,7 +169,8 @@ TECH_SPEC_DRAFT.md   decision log + contracts + tradeoffs + recovery semantics
 
 ## Status
 
-Build steps 1–5 (scaffold, extract, dbt, enrich, report) are
-complete; the Omni semantic model and scheduling stub land in steps
-6–7 — tracked in [TECH_SPEC_DRAFT.md](TECH_SPEC_DRAFT.md) §9. This
-README is finalized at wrap.
+**Complete.** All seven build steps and all six brief deliverables
+are shipped; the full build log — including the LLM prompt
+iteration story (v1 → v2 → v2.1, regression gate, human overrides)
+— is in [TECH_SPEC.md](TECH_SPEC.md) §9, with the
+implemented / out-of-scope / hours-vs-week statement in §12.

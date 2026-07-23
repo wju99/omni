@@ -1,0 +1,60 @@
+# Scheduled backlink-gap pipeline (spec B10).
+#
+# The monthly schedule is committed and real, but the job is GATED
+# behind the repository variable PIPELINE_SCHEDULE_ENABLED: the full
+# run downloads ~18 GB of Common Crawl webgraph, which exceeds
+# standard GitHub-hosted runner disk. Enable the gate on a
+# self-hosted runner, or point dbt at the MotherDuck prod target
+# (dbt/profiles.yml) for a durable warehouse + manifest. Manual
+# `workflow_dispatch` runs are always allowed.
+#
+# Secrets: ANTHROPIC_API_KEY (optional) — without it the enrich
+# stage is an explicit DRY RUN using the committed cache, so the
+# pipeline still completes end to end.
+#
+# Because every stage is idempotent and manifest-checkpointed, a
+# failed scheduled run needs no special recovery: the next
+# invocation resumes from the first incomplete unit. Picking up a
+# NEW crawl release = bump RELEASE in pipeline/config.py
+# (auto-discovery is a week-1 item; see TECH_SPEC.md §12).
+
+name: backlink-pipeline
+
+on:
+  schedule:
+    # Monthly, the 5th at 06:13 UTC — CC domain-webgraph releases
+    # land roughly monthly.
+    - cron: "13 6 5 * *"
+  workflow_dispatch: {}
+
+jobs:
+  run-pipeline:
+    runs-on: ubuntu-latest
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      vars.PIPELINE_SCHEDULE_ENABLED == 'true'
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Install pinned dependencies
+        run: make setup
+
+      - name: Run unit tests
+        run: make test
+
+      - name: Run pipeline (idempotent, resumable)
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: make run
+
+      - name: Upload report artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: backlink-report
+          path: |
+            artifacts/REPORT.md
+            artifacts/top_25_report.csv

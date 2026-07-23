@@ -1,6 +1,6 @@
-# Omni Growth Engineering Take-Home — Tech Spec (DRAFT, in progress)
+# Omni Growth Engineering Take-Home — Tech Spec
 
-> **Status:** **Scope fully locked (Batches 1–4).** Building — see §9 for build progress + flagged deep-dives. This doc doubles as the start of Deliverable #5 (Tech Spec).
+> **Status: COMPLETE.** All 7 build steps shipped. Map: §2 locked scope decisions · §6 reproducibility/retry/scheduling · §7 implicit & explicit contracts · §8 Omni model · §9 build log (with the LLM iteration story) · §12 delivery statement (implemented / out of scope / hours vs. week). This document is Deliverable #5.
 
 ---
 
@@ -200,7 +200,7 @@ Every stage boundary is either **explicit** (machine-enforced; violation fails t
 
 **Our build (B12):** hand-write **one faithful Omni Topic** over the top-25 mart (can't connect Omni to a laptop DuckDB). Shape = **degenerate star / one wide mart** (one row per referring domain): dimensions `domain, category, opportunity_type, tld, authority_bucket`; measures `referring_domain_count, avg_authority, consensus`; opportunity **score** as a metric; a filter reproducing the top-25. Clean, well-named mart columns ⇒ better Omni model (Omni auto-generates from schema — reinforces B11 mart discipline).
 
-**Validation approach (LOCKED = A):** No live Omni instance by default (hosted Omni can't reach a local DuckDB file). Validity rests on: (1) the dbt marts the model sits on are runnable + **tested** (objective data validation); (2) model-as-code grounded in Omni's real syntax — the reviewers are Omni; (3) each measure/dimension carries its **equivalent SQL** for line-by-line audit against the marts; (4) optional CI lint if Omni ships a validator. **Stretch (B — time-permitting):** connect a free Omni instance to **MotherDuck** (B15), import the model, and screenshot it loading + returning the top-25.
+**Validation approach (LOCKED = A):** No live Omni instance by default (hosted Omni can't reach a local DuckDB file). Validity rests on: (1) the dbt marts the model sits on are runnable + **tested** (objective data validation); (2) model-as-code grounded in Omni's real syntax — the reviewers are Omni; (3) each measure/dimension carries its **equivalent SQL** for line-by-line audit against the marts; (4) optional CI lint if Omni ships a validator. **Stretch (B): deliberately not pursued** — a live Omni instance connected to MotherDuck with import screenshots remains the strongest possible proof, but validation A stands on its own; logged under the week-1 backlog instead of half-shipping it.
 
 **Build-time:** pull Omni's exact modeling YAML syntax from docs — do **not** hand-write from memory.
 
@@ -222,13 +222,13 @@ Scoping complete (B1–B16). Proposed build order:
    - **v2.1 (INVESTOR RULE) + regression gate + human overrides:** a human spot-check caught `bvp.com` framed as a submittable directory — verified its competitor links come from BVP's *Atlas* editorial market reports (VCs link via portfolio pages or editorial lists; neither is outreachable). v2.1 added the INVESTOR RULE; a **regression gate with invariants committed before the run** then caught three violations: (1) `stitchdata.com` re-killed as competitor — **correct**: Qlik owns Stitch via Talend (2023), a two-hop ownership chain the model traced and our own invariant missed (the closed list outperformed the gate's author); (2–3) real churn — `montecarlodata.com` (a partner *named in the prompt*) flipped irrelevant and farm `gitnux.org` resurrected. Measured lesson: **one added prompt rule → 18 verdict flips at temperature 0** (borderline rows re-roll on any prompt change; the rule also over-generalized to analyst firms/OSS docs — `infotech`, `duckdb.org`, `trino.io`). Architectural answer, not more prompting: **`enrichment_overrides` dbt seed** — human-verified verdicts coalesce over LLM verdicts in the top mart (LLM proposes, humans dispose, both versioned in git; reason column mandatory; rows added only after manual verification). Final state: cache-level gate **PASS**, mart-level gate **PASS** (25 rows; `montecarlodata` restored by override; `bvp`/`gitnux`/`stitchdata` out).
 5. ✅ **Publish** — DONE: `report.py` → committed `artifacts/top_25_report.csv` + `artifacts/REPORT.md` (footprint table w/ 1/7-of-Metabase headline, 7-step funnel, 25 rows w/ rationale + playbook action, auto-generated "notable deliberate exclusions" table (amazonaws/spotify/stripe/nih cut with reasons), insights + limitations). Actions derive **deterministically** from `opportunity_type` (LLM never writes advice); **no wall-clock timestamps** → byte-identical re-runs.
 6. ✅ **Omni model** — DONE: one faithful view + topic in Omni's model-IDE file layout (`omni/views/*.view`, `omni/topics/*.topic`), all syntax grounded in docs.omni.co parameter references; YAML-validated; equivalent-SQL audit runs live against the warehouse (see `omni/README.md` and §8).
-7. **Wrap** — GH Actions cron stub (B10), README, finalize this Tech Spec.
+7. ✅ **Wrap** — DONE: committed GH Actions **monthly `schedule:` cron** (`.github/workflows/pipeline.yml`) — schedule real but **gated behind a repo variable** (`PIPELINE_SCHEDULE_ENABLED`): honest about GitHub-hosted runner disk (~14 GB) vs. the 18 GB download; enable on a self-hosted runner or with the MotherDuck target. Manual `workflow_dispatch` always available; `ANTHROPIC_API_KEY` optional secret (DRY RUN without); report artifacts uploaded per run. README finalized; spec retitled `TECH_SPEC.md` + delivery statement (§12).
 
 **Build-time deep-dives flagged:**
 - **dbt structure (B11)** — user has limited dbt exposure; hands-on pass on models/tests/contracts, teach-as-we-go.
 - **Omni model (B12)** — pull Omni's exact modeling YAML from docs at build; don't hand-write from memory.
 - ✅ **CC webgraph path** — verified via HEAD 2026-07-22 (see §3): all three files live, ~17.9 GB total gz, byte-ranges supported.
-- **Stretch (time-permitting):** live Omni import via MotherDuck for screenshot proof (validation B).
+- **Stretch (validation B — live Omni import via MotherDuck):** deliberately not pursued at wrap; see §8 and week-1 item 3 (§12).
 
 ---
 
@@ -253,4 +253,23 @@ Scoping complete (B1–B16). Proposed build order:
 
 ---
 
-**Deliverables mapping (assignment):** ETL framework + code · dbt project · Omni semantic model · top-25 report · this Tech Spec.
+## 12. Delivery statement (implemented · out of scope · hours vs. week)
+
+**Implemented — all 6 brief deliverables:**
+1. **ETL framework + code** — `pipeline/`: chunked resumable extract (manifest-checkpointed 64 MiB ranges over 17.9 GB), filtered load (2B edges → 4,925), bounded cached LLM enrichment, deterministic report stage; idempotent CLI throughout.
+2. **dbt project** — `dbt/`: 3 layers, 9 models, 29 tests (incl. the no-gap-domain-links-to-Omni thesis test), enforced 12-column contract on the deliverable mart, 3 seeds (structural exclusions + human overrides).
+3. **Omni semantic model** — `omni/`: view + topic in Omni's model-IDE layout, every parameter verified against Omni's docs, live equivalent-SQL audit.
+4. **Top-25 report** — `artifacts/REPORT.md` + `top_25_report.csv`: footprint headline (Omni 265 referrers ≈ 1/7 of Metabase), auditable 7-step funnel, per-domain rationale + playbook action, deliberate-exclusions table.
+5. **Tech Spec** — this document: contracts (§7), decisions + rejected alternatives (§2), tradeoffs (throughout), recovery semantics (§6).
+6. **Git repo** — full history including the LLM iteration story (prompt v1 → v2 → v2.1, pre-committed regression gate, human-overrides layer — every classification change diffable).
+
+**Out of scope:** see §11. Notably: monitoring/observability, page-level WAT processing, a live orchestration platform, multi-run trend analysis, and the prod infra swaps (Docker, S3 landing, MotherDuck-first) — each documented with its swap path.
+
+**A few hours vs. a week — priority order if given the week:**
+1. **Page-level evidence (WAT):** anchor text + exact linking URLs per referring domain — upgrades each row from "this domain links to competitors" to "this page, in this context," and unlocks the May-vs-June per-month delta the domain graph cannot express.
+2. **Enrichment grounding + hygiene:** fetch homepage title/meta before classifying (removes the name-only misreads: `coda.io`, `atlassian.com`), registered-entity dedupe (`montecarlo.ai`/`montecarlodata.com`), auto-discovery of the newest webgraph release.
+3. **Live wiring:** MotherDuck as the shared warehouse + a real Omni import of the model (validation-B screenshots) + scheduled Slack digest with new-since-last-run deltas + a Growth feedback loop (pursued/won/rejected feeding back into scoring).
+
+---
+
+**Deliverables mapping (assignment):** ETL framework + code · dbt project · Omni semantic model · top-25 report · this Tech Spec · Git repo.
