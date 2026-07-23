@@ -4,7 +4,7 @@
 -include .env
 export
 
-.PHONY: setup init status extract transform run test clean-db
+.PHONY: setup init status extract transform enrich run test clean-db
 
 setup:      ## Install pinned dependencies into .venv (requires uv).
 	uv sync
@@ -17,6 +17,9 @@ extract:    ## Download webgraph + load raw tables (resumable).
 
 transform:  ## Build + test all dbt models (seeds, models, tests).
 	uv run python -m pipeline transform
+
+enrich:     ## Classify shortlist with Claude (DRY RUN without key).
+	uv run python -m pipeline enrich
 
 status:     ## Show manifest progress and warehouse tables.
 	uv run python -m pipeline status

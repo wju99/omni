@@ -1,6 +1,6 @@
 # Omni Growth Engineering Take-Home — Tech Spec (DRAFT, in progress)
 
-> **Status:** **Scope fully locked (Batches 1–4).** Ready to build — see §8 for the build plan + flagged deep-dives. This doc doubles as the start of Deliverable #5 (Tech Spec).
+> **Status:** **Scope fully locked (Batches 1–4).** Building — see §9 for build progress + flagged deep-dives. This doc doubles as the start of Deliverable #5 (Tech Spec).
 
 ---
 
@@ -13,9 +13,8 @@
 **Clarifications resolved:**
 - **Backlink** = inbound hyperlink; **referring domain** = unique linking domain (the deliverable unit; brief caps at 25).
 - **"Backlink position"** = competitive standing (who links to us vs. competitors) → the gap is the opportunity.
-- **"Semantic layer"** here = BI/analytics business-metric layer (Omni modeling) — **NOT** RAG / embeddings / vector search. No vector DB, no embeddings. Pure structured SQL analytics.
+- **"Semantic layer"** here = BI/analytics business-metric layer (Omni modeling) 
 - **"Retry semantics"** = idempotency + resumability + checkpointing for a recurring scheduled pipeline. Mirror the team's "claim-a-row" pattern at MVP scale (our own lightweight manifest — NOT their Snowflake/AWS/Dagster).
-- **The architecture diagram = context about the team we're interviewing with, NOT a system we build on.** This is a **clean-room build** on the recommended stack (Python / DuckDB / dbt Core / Omni model).
 
 ---
 
@@ -69,7 +68,8 @@ Transform (dbt Core on DuckDB):
 
 Enrich (bounded, cached): deterministic heuristic filter -> ~150 shortlist
   → Haiku 4.5 (structured outputs) -> {is_relevant, category, opportunity_type, rationale}
-  → cache to DuckDB table keyed by domain (idempotent; re-runs read cache)
+  → cache to DuckDB table keyed by domain → exported to COMMITTED artifacts/enrichment_cache.csv
+    (idempotent; keyless re-runs bootstrap from the committed cache — explicit DRY RUN without API key)
 
 Publish: top-25 report (domain + score + category + opportunity_type + why) + Omni semantic model
 ```
@@ -157,9 +157,41 @@ _Numbered stages = runtime data flow. Red nodes = the two flaky external seams; 
 
 **Cost:** ~$0.10–0.50/run Haiku (vs ~$0.35–1.50 Sonnet) at ~150–300 shortlist calls; effectively one-time due to caching. Non-issue.
 
+**Keyless review & DRY RUN (design added at build):** the enrichment cache doubles as the reproducibility snapshot. After a live run it is exported — sorted by domain, with `model` + `enriched_at` provenance columns — to **committed** `artifacts/enrichment_cache.csv`. Running `enrich` without `ANTHROPIC_API_KEY` prints an explicit, loud **DRY RUN** banner, makes zero API calls, and bootstraps the cache table from the committed CSV — so the full pipeline reproduces end-to-end with **no credentials at all**. Review tiers: (1) read the committed report artifacts; (2) keyless full re-run from the committed cache; (3) regenerate classifications with your own key (`temperature=0` + pinned model + `json_schema` ⇒ near-deterministic). LLM outputs are treated as **data with provenance** — versioned, diffable in git — mirroring the team's "LLM enrichment → raw outputs → dbt" pattern.
+
 ---
 
-## 7. Omni semantic model (design notes — LOCKED B12)
+## 7. Contracts — implicit & explicit
+
+Every stage boundary is either **explicit** (machine-enforced; violation fails the run) or **implicit** (assumed; monitored so drift fails loudly rather than silently).
+
+**Explicit contracts (enforced):**
+
+| Boundary | Contract | Enforced by |
+|---|---|---|
+| extract → warehouse | `raw.*` table shapes (targets / vertices / ranks / target_edges) | typed `read_csv(columns=…)` loads (fail on drift) + dbt source & staging tests (`unique` / `not_null`) |
+| dbt marts → consumers | `top_backlink_opportunities`: 12 columns, exact names + types | dbt **model contract** (`enforced: true`) — build fails on drift |
+| analysis semantics | no gap domain links to Omni (thesis) · score ∈ [0,1] · ≤ 25 rows · consensus ∈ {1..4} | singular tests + generic tests, run on every `dbt build` |
+| enrich ↔ LLM | response shape `{is_relevant: bool, category: enum(9), opportunity_type: enum(7), rationale: str}` | **structured outputs `json_schema`** (API-side enforcement) + `temperature=0` + pinned `claude-haiku-4-5` |
+| enrich → warehouse | `enrich.domain_enrichment` PK(domain) + provenance (`model`, `enriched_at`) | DDL at init; `INSERT OR REPLACE` upsert |
+| recovery | unit lifecycle `pending → in_progress → done/failed`; `done` is never redone | `pipeline_manifest` PK(release, stage, unit) + claim/skip helpers (unit-tested) |
+| scheduling | every CLI command idempotent + resumable; non-zero exit on failure | stage design + subprocess exit-code propagation |
+| repo artifacts | `artifacts/enrichment_cache.csv` column order = cache DDL; sorted by domain (stable git diffs) | export query |
+
+**Implicit contracts (assumed + monitored):**
+
+| Assumption | Why acceptable | How drift surfaces |
+|---|---|---|
+| CC file layout & formats (3 tab-separated gz files at the documented URL pattern; reversed-domain notation; edges reference vertices line-ids) | external publisher contract, stable across releases | HEAD-verified pre-build; typed load fails loudly; target-coverage check aborts if omni.co missing |
+| ranks cover (nearly) all vertices | CC builds both from the same graph | LEFT JOIN + explicit NULL handling at the rank floor; staging tests |
+| registered-domain grain (subdomains pre-aggregated) | the webgraph's documented unit; matches the "referring domain" deliverable | n/a — definitional |
+| domain name + world knowledge suffice for classification (no page fetch) | MVP scope; errors bounded by the is_relevant gate + human review of 25 rows | spot-check; week-1: homepage grounding |
+| DuckDB single-writer | stages open/close their own connection | loud lock error at connect |
+| Anthropic API reachable / priced as expected | bounded ≤150 calls, ~$0.10–0.50, cached thereafter | SDK backoff-retries; explicit DRY RUN degradation without key |
+
+---
+
+## 8. Omni semantic model (design notes — LOCKED B12)
 
 **What Omni's model is (verified from docs):** a semantic layer over the warehouse, in **three layers** — _schema model_ (auto-generated from the warehouse, inferred joins/keys) → _shared model_ (governed, org-wide metric definitions) → _workbook model_ (ad-hoc, extends shared). Signature feature: metrics built while exploring a workbook can be **promoted** up into the shared model (and down into the DB schema) — live/bidirectional, unlike static LookML. Building blocks: **Topics** (curate joined **views** into a query starting point), **views**, **fields** split into **dimensions** + **measures**, auto-inferred **joins**.
 
@@ -173,7 +205,7 @@ _Numbered stages = runtime data flow. Red nodes = the two flaky external seams; 
 
 ---
 
-## 8. NEXT STEPS — BUILD (scope fully locked)
+## 9. NEXT STEPS — BUILD (scope fully locked)
 
 Scoping complete (B1–B16). Proposed build order:
 
@@ -193,7 +225,7 @@ Scoping complete (B1–B16). Proposed build order:
 
 ---
 
-## 9. "If I had a week" backlog (already identified)
+## 10. "If I had a week" backlog (already identified)
 
 - WAT-based per-month (May vs June) delta/trend — domain webgraph can't separate months.
 - Page-level anchor-text extraction (WAT) for richer relevance/context.
@@ -203,7 +235,7 @@ Scoping complete (B1–B16). Proposed build order:
 
 ---
 
-## 10. Out of scope (MVP)
+## 11. Out of scope (MVP)
 
 - Monitoring / Observability
 - Full crawl / WAT at scale.

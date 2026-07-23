@@ -15,17 +15,25 @@ import argparse
 
 from pipeline import config
 from pipeline import db
+from pipeline import enrich
 from pipeline import extract
 from pipeline import transform
 
-_NOT_IMPLEMENTED = "not implemented yet (build plan: TECH_SPEC_DRAFT §8)"
+_NOT_IMPLEMENTED = "not implemented yet (build plan: TECH_SPEC_DRAFT §9)"
+
+
+def _finalize() -> None:
+    """Rebuilds the enrichment-gated mart + its tests (cheap)."""
+    transform.run(select="top_backlink_opportunities+")
+
 
 # Ordered stages of one pipeline run. Entries become callables as
-# each build step lands: enrich (step 4), report (step 5).
+# each build step lands: report (step 5).
 _STAGES = (
     ("extract", extract.run),
     ("transform", transform.run),
-    ("enrich", None),
+    ("enrich", enrich.run),
+    ("finalize", _finalize),
     ("report", None),
 )
 
@@ -64,6 +72,11 @@ def cmd_extract(_args: argparse.Namespace) -> None:
 def cmd_transform(args: argparse.Namespace) -> None:
     """Runs the dbt build on its own."""
     transform.run(select=args.select)
+
+
+def cmd_enrich(_args: argparse.Namespace) -> None:
+    """Runs the LLM enrichment stage on its own."""
+    enrich.run()
 
 
 def cmd_reset(args: argparse.Namespace) -> None:
@@ -116,6 +129,10 @@ def main(argv=None) -> None:
         "--select", default=None,
         help="dbt node selection for partial rebuilds")
     transform_parser.set_defaults(func=cmd_transform)
+    sub.add_parser(
+        "enrich",
+        help="classify shortlist with Claude (DRY RUN without key)",
+    ).set_defaults(func=cmd_enrich)
     reset = sub.add_parser(
         "reset", help="clear manifest rows for a stage (forces redo)"
     )
