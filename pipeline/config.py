@@ -95,3 +95,17 @@ def reverse_domain(domain: str) -> str:
 TOP_N = 25
 
 ANTHROPIC_MODEL = "claude-haiku-4-5"
+
+# Named BI/analytics competitors for the enrichment COMPETITOR RULE
+# (strict exclude with an explicit list — prompt v2). The four gap
+# targets are excluded at the SQL layer already; this list covers the
+# wider BI field so the LLM never improvises the boundary. Companies
+# only — adjacent data-stack vendors (ELT, reverse-ETL, catalogs,
+# observability, orchestration) are partners, never competitors.
+BI_COMPETITORS = (
+    "Sigma Computing", "Hex", "Mode", "Metabase",
+    "Looker", "Tableau", "Power BI", "Qlik", "ThoughtSpot",
+    "Domo", "Sisense", "GoodData", "Holistics", "Lightdash",
+    "Preset", "Redash", "Zoho Analytics", "Amazon QuickSight",
+    "Explo", "Quadratic", "Evidence",
+)

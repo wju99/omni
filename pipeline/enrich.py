@@ -38,6 +38,7 @@ _CATEGORIES = (
     "community_or_directory",
     "education_or_research",
     "consultancy_or_agency",
+    "competitor_bi_platform",
     "aggregator_or_listicle",
     "junk_or_spam",
     "other",
@@ -70,6 +71,11 @@ _RESPONSE_SCHEMA = {
     "additionalProperties": False,
 }
 
+# Prompt v2: explicit competitor list (strict exclude), partner rule
+# for adjacent data-stack vendors, firmer content-farm rule. v1
+# improvised the competitor boundary and wrongly killed ELT partners
+# (fivetran.com, airbyte.com) — see spec §6 / git history of
+# artifacts/enrichment_cache.csv for the v1 -> v2 diff.
 _SYSTEM_PROMPT = (
     "You are a growth-marketing analyst for Omni (omni.co), a "
     "business-intelligence and analytics platform. You evaluate "
@@ -78,11 +84,30 @@ _SYSTEM_PROMPT = (
     "backlink-outreach targets.\n"
     "Classify from the domain name, the link signals provided, and "
     "your knowledge of the data/analytics ecosystem. Be decisive.\n"
+    "\n"
+    "COMPETITOR RULE (strict): Omni's competitors are BI/analytics "
+    "platforms ONLY, and specifically ONLY domains owned by: "
+    f"{', '.join(config.BI_COMPETITORS)}. "
+    "Competitor-owned domains are never outreach targets: set "
+    "is_relevant=false, category=competitor_bi_platform, "
+    "opportunity_type=not_applicable. Do NOT exclude any other "
+    "domain on competitor grounds.\n"
+    "PARTNER RULE: adjacent data-stack vendors that are not BI "
+    "platforms — ELT/ETL (e.g. Fivetran, Airbyte, Rivery), "
+    "reverse-ETL/CDP (e.g. Hightouch, RudderStack), data catalogs "
+    "(e.g. Atlan, Castor), data observability (e.g. Monte Carlo, "
+    "Metaplane), orchestration (e.g. Astronomer) — are "
+    "complementary PARTNERS, not competitors. Their integration/"
+    "destination directories routinely list BI tools; these are "
+    "typically strong opportunities.\n"
+    "JUNK RULE: programmatic content farms — auto-generated "
+    "statistics pages, thin listicles, scraped directories with no "
+    "editorial curation — are is_relevant=false (junk_or_spam or "
+    "aggregator_or_listicle). A generic name plus a deep authority "
+    "rank plus links to all four competitors is a strong farm "
+    "signal.\n"
     "- is_relevant: true only if outreach could plausibly yield a "
-    "valuable, on-topic backlink (data/analytics/BI vendors and "
-    "blogs, credible tech media, tool directories, education, "
-    "consultancies). false for spam, link farms, generic listicle "
-    "mills, and off-topic or unidentifiable domains.\n"
+    "valuable, on-topic backlink.\n"
     "- category and opportunity_type: pick the single best value.\n"
     "- rationale: one crisp sentence (max 25 words) a marketer can "
     "act on."
