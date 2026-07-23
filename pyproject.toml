@@ -1,0 +1,22 @@
+[project]
+name = "omni-backlinks"
+version = "0.1.0"
+description = "Backlink gap analysis over the Common Crawl domain webgraph."
+requires-python = ">=3.10"
+dependencies = [
+    "anthropic>=0.40",
+    "dbt-duckdb>=1.9",
+    "duckdb>=1.1",
+    "requests>=2.32",
+    "tqdm>=4.66",
+]
+
+[tool.uv]
+package = false
+dev-dependencies = [
+    "pytest>=8.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]

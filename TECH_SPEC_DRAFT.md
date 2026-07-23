@@ -51,7 +51,7 @@ _(B9–B12 = Batch 3 engineering-rigor; B13–B16 = Batch 4 packaging.)_
 - **June 2026 crawl** = `CC-MAIN-2026-25` (Jun 5–18, 2026)
 - **Domain webgraph release** `cc-main-2026-apr-may-jun` built from **Apr + May + June 2026** crawls → **includes both named crawls**.
 - Webgraph cadence: **rolling ~monthly**, each a 3-month window (corrects an earlier wrong "3×/year + lag" assumption — no lag; latest already includes June).
-- **TODO at build:** confirm exact release download path/slug (index summary may have normalized it). Webgraph = vertices (domains + ranks) + edges (domain→domain).
+- **✅ VERIFIED (2026-07-22, HTTP HEAD):** all three files live under `https://data.commoncrawl.org/projects/hyperlinkgraph/cc-main-2026-apr-may-jun/domain/` — `…domain-vertices.txt.gz` **0.9 GB**, `…domain-edges.txt.gz` **14.6 GB**, `…domain-ranks.txt.gz` **2.4 GB** (~17.9 GB total gz; last-modified 2026-06-24). `Accept-Ranges: bytes` → chunked resumable downloads work, which is what the manifest download units key on.
 
 ---
 
@@ -177,7 +177,7 @@ _Numbered stages = runtime data flow. Red nodes = the two flaky external seams; 
 
 Scoping complete (B1–B16). Proposed build order:
 
-1. **Scaffold** — repo layout, `pyproject` + pinned lockfile, Makefile (`setup` / `run` / `test`), `.env` for `ANTHROPIC_API_KEY`.
+1. ✅ **Scaffold** — DONE: `pipeline/` package (config · db + manifest · CLI), `pyproject` + `uv.lock` (Python pinned 3.12 for dbt compat), Makefile, `.env.example`, manifest tests green. Found: DuckDB rejects bare `current_timestamp` inside `ON CONFLICT DO UPDATE SET` → use `now()`.
 2. **Extract + Load** — download `cc-main-2026-apr-may-jun` webgraph from CC S3, filter to in-edges of the 5 targets, load into DuckDB `raw` schema; `pipeline_manifest` claim-a-row + resume (B9).
 3. **dbt** — staging → intermediate → marts; tests + top-25 contract + the "no gap domain links to omni" singular test (B11). *Teach-as-we-go.*
 4. **Enrich** — heuristic shortlist → Haiku 4.5 structured-outputs → cache-by-domain table (B8).
@@ -188,7 +188,7 @@ Scoping complete (B1–B16). Proposed build order:
 **Build-time deep-dives flagged:**
 - **dbt structure (B11)** — user has limited dbt exposure; hands-on pass on models/tests/contracts, teach-as-we-go.
 - **Omni model (B12)** — pull Omni's exact modeling YAML from docs at build; don't hand-write from memory.
-- **CC webgraph path (§3 TODO)** — confirm exact release download slug/URL before Extract.
+- ✅ **CC webgraph path** — verified via HEAD 2026-07-22 (see §3): all three files live, ~17.9 GB total gz, byte-ranges supported.
 - **Stretch (time-permitting):** live Omni import via MotherDuck for screenshot proof (validation B).
 
 ---
