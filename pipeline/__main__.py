@@ -5,6 +5,10 @@ importable (and testable) on its own. ``run`` executes the stages in
 order; stages not yet implemented are reported and skipped, so this
 entrypoint is safe to wire into scheduling (Makefile / GitHub Actions
 cron) from day one (spec B10).
+
+Each stage opens and closes its own warehouse connection — DuckDB
+allows a single writing process, and the transform stage hands the
+file to dbt (a separate process).
 """
 
 import argparse
@@ -12,15 +16,15 @@ import argparse
 from pipeline import config
 from pipeline import db
 from pipeline import extract
+from pipeline import transform
 
 _NOT_IMPLEMENTED = "not implemented yet (build plan: TECH_SPEC_DRAFT §8)"
 
-# Ordered stages of one pipeline run. Values become callables as each
-# build step lands: transform (step 3), enrich (step 4), report
-# (step 5).
+# Ordered stages of one pipeline run. Entries become callables as
+# each build step lands: enrich (step 4), report (step 5).
 _STAGES = (
     ("extract", extract.run),
-    ("transform", None),
+    ("transform", transform.run),
     ("enrich", None),
     ("report", None),
 )
@@ -54,9 +58,12 @@ def cmd_status(_args: argparse.Namespace) -> None:
 
 def cmd_extract(_args: argparse.Namespace) -> None:
     """Runs the extract stage (download + load) on its own."""
-    con = db.connect()
-    extract.run(con)
-    con.close()
+    extract.run()
+
+
+def cmd_transform(args: argparse.Namespace) -> None:
+    """Runs the dbt build on its own."""
+    transform.run(select=args.select)
 
 
 def cmd_reset(args: argparse.Namespace) -> None:
@@ -74,15 +81,13 @@ def cmd_reset(args: argparse.Namespace) -> None:
 
 def cmd_run(_args: argparse.Namespace) -> None:
     """Runs all pipeline stages in order (idempotent, resumable)."""
-    con = db.connect()
     for name, stage_fn in _STAGES:
         if stage_fn is None:
             print(f"[run] {name}: {_NOT_IMPLEMENTED}")
             continue
         print(f"[run] {name}: start", flush=True)
-        stage_fn(con)
+        stage_fn()
         print(f"[run] {name}: done", flush=True)
-    con.close()
 
 
 def main(argv=None) -> None:
@@ -104,6 +109,13 @@ def main(argv=None) -> None:
     sub.add_parser(
         "extract", help="download webgraph + load raw tables"
     ).set_defaults(func=cmd_extract)
+    transform_parser = sub.add_parser(
+        "transform", help="run dbt build (seeds + models + tests)"
+    )
+    transform_parser.add_argument(
+        "--select", default=None,
+        help="dbt node selection for partial rebuilds")
+    transform_parser.set_defaults(func=cmd_transform)
     reset = sub.add_parser(
         "reset", help="clear manifest rows for a stage (forces redo)"
     )

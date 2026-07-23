@@ -1,0 +1,36 @@
+version: 2
+
+models:
+  - name: stg_webgraph__vertices
+    description: One row per domain in the webgraph.
+    columns:
+      - name: vertex_id
+        tests: [unique, not_null]
+      - name: domain_rev
+        tests: [not_null]
+
+  - name: stg_webgraph__ranks
+    description: One row per ranked domain (CC authority signals).
+    columns:
+      - name: domain_rev
+        tests: [unique, not_null]
+
+  - name: stg_webgraph__target_edges
+    description: In-edges of the target domains (integer endpoints).
+    columns:
+      - name: src_id
+        tests: [not_null]
+      - name: dst_id
+        tests: [not_null]
+
+  - name: stg_webgraph__targets
+    description: Competitor set (one row per target domain).
+    columns:
+      - name: competitor
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [omni, sigma, hex, mode, metabase]
+      - name: domain_rev
+        tests: [unique, not_null]

@@ -4,7 +4,7 @@
 -include .env
 export
 
-.PHONY: setup init status extract run test clean-db
+.PHONY: setup init status extract transform run test clean-db
 
 setup:      ## Install pinned dependencies into .venv (requires uv).
 	uv sync
@@ -14,6 +14,9 @@ init:       ## Create the DuckDB warehouse, schemas, and manifest.
 
 extract:    ## Download webgraph + load raw tables (resumable).
 	uv run python -m pipeline extract
+
+transform:  ## Build + test all dbt models (seeds, models, tests).
+	uv run python -m pipeline transform
 
 status:     ## Show manifest progress and warehouse tables.
 	uv run python -m pipeline status

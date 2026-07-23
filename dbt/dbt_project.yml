@@ -1,0 +1,33 @@
+# dbt project for the backlink gap analysis (spec B11).
+name: omni_backlinks
+version: "0.1.0"
+profile: omni_backlinks
+
+model-paths: ["models"]
+seed-paths: ["seeds"]
+test-paths: ["tests"]
+macro-paths: ["macros"]
+
+# Tunable analysis knobs — override per run with --vars.
+vars:
+  rank_floor: 20000000   # drop domains ranked worse than this
+  consensus_weight: 0.5
+  authority_weight: 0.5
+  shortlist_size: 150    # LLM enrichment budget (spec B8)
+  top_n: 25              # deliverable cap (spec B13)
+
+models:
+  omni_backlinks:
+    staging:
+      +materialized: view    # cheap renames; no storage
+      +schema: staging
+    intermediate:
+      +materialized: table   # pays the 100M-row joins exactly once
+      +schema: intermediate
+    marts:
+      +materialized: table
+      +schema: marts
+
+seeds:
+  omni_backlinks:
+    +schema: seeds

@@ -1,0 +1,36 @@
+version: 2
+
+sources:
+  - name: webgraph
+    description: >
+      Common Crawl domain webgraph release cc-main-2026-apr-may-jun
+      (aggregates the May CC-MAIN-2026-21 and June CC-MAIN-2026-25
+      collections), loaded by `python -m pipeline extract`.
+    schema: raw
+    tables:
+      - name: vertices
+        description: One row per domain; id is the edge endpoint key.
+        columns:
+          - name: id
+            tests: [not_null]
+      - name: ranks
+        description: >
+          CC-published centrality per domain — harmonic centrality
+          and PageRank positions/values (authority signal, spec B7).
+      - name: target_edges
+        description: >
+          Edges filtered on ingest to in-edges of the target domains
+          only (spec B6); src_id/dst_id join vertices.id.
+      - name: targets
+        description: >
+          The competitor set materialized from pipeline config —
+          single source of truth for target domains.
+
+  - name: enrichment
+    description: >
+      LLM enrichment cache written by the enrich stage (spec B8),
+      keyed by domain. Created empty at warehouse init so dbt builds
+      succeed before any enrichment has run.
+    schema: enrich
+    tables:
+      - name: domain_enrichment

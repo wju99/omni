@@ -33,6 +33,7 @@ env/
 target/
 dbt_packages/
 logs/
+.user.yml
 
 # Raw data / Common Crawl downloads (large, reproducible)
 data/

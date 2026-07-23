@@ -1,0 +1,20 @@
+version: 2
+
+models:
+  - name: int_referring_domain_links
+    description: One row per (referring domain, competitor) link.
+    columns:
+      - name: domain
+        tests: [not_null]
+      - name: competitor
+        tests: [not_null]
+
+  - name: int_domain_signals
+    description: >
+      One row per referring domain with consensus, per-competitor
+      link flags, and CC authority ranks.
+    columns:
+      - name: domain_rev
+        tests: [unique, not_null]
+      - name: domain
+        tests: [not_null]

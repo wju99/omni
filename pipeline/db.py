@@ -32,6 +32,22 @@ CREATE TABLE IF NOT EXISTS pipeline_manifest (
 )
 """
 
+# LLM enrichment cache (spec B8): written by the enrich stage,
+# declared as a dbt *source*. Created empty at init so dbt builds
+# succeed before any enrichment has run (mirrors the team's
+# "LLM enrichment -> raw outputs -> dbt" pattern).
+_ENRICHMENT_DDL = """
+CREATE TABLE IF NOT EXISTS enrich.domain_enrichment (
+    domain           VARCHAR PRIMARY KEY,
+    is_relevant      BOOLEAN,
+    category         VARCHAR,
+    opportunity_type VARCHAR,
+    rationale        VARCHAR,
+    model            VARCHAR,
+    enriched_at      TIMESTAMP DEFAULT current_timestamp
+)
+"""
+
 
 def connect(db_path=None) -> duckdb.DuckDBPyConnection:
     """Opens (and initializes) the DuckDB warehouse.
@@ -44,16 +60,24 @@ def connect(db_path=None) -> duckdb.DuckDBPyConnection:
     """
     path = pathlib.Path(db_path) if db_path else config.DB_PATH
     path.parent.mkdir(parents=True, exist_ok=True)
-    con = duckdb.connect(str(path))
+    try:
+        con = duckdb.connect(str(path))
+    except duckdb.IOException as error:
+        raise SystemExit(
+            "warehouse is locked — another pipeline process (e.g. a "
+            "running extract) holds it; wait for it to finish and "
+            f"re-run. ({error})"
+        ) from error
     init_db(con)
     return con
 
 
 def init_db(con: duckdb.DuckDBPyConnection) -> None:
-    """Creates schemas and the manifest table if missing."""
+    """Creates schemas, the manifest, and the enrichment cache."""
     for schema in _SCHEMAS:
         con.execute(f"CREATE SCHEMA IF NOT EXISTS {schema}")
     con.execute(_MANIFEST_DDL)
+    con.execute(_ENRICHMENT_DDL)
 
 
 def claim(con, stage: str, unit: str, release: str = None) -> bool:

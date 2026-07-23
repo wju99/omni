@@ -1,0 +1,61 @@
+version: 2
+
+models:
+  - name: backlink_opportunities
+    description: >
+      Scored gap set: referring domains linking to >=1 competitor
+      but not to Omni, after heuristic filters (spec §5).
+    columns:
+      - name: domain
+        tests: [unique, not_null]
+      - name: competitor_consensus
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [1, 2, 3, 4]
+                quote: false
+      - name: opportunity_score
+        tests: [not_null]
+
+  - name: enrichment_shortlist
+    description: >
+      Top candidates by score, sent to the bounded LLM enrichment
+      pass (spec B8).
+    columns:
+      - name: domain
+        tests: [unique, not_null]
+
+  - name: top_backlink_opportunities
+    description: >
+      The deliverable: up to 25 relevance-gated backlink
+      opportunities with enrichment annotations (spec B13).
+    config:
+      contract:
+        enforced: true
+    columns:
+      - name: domain
+        data_type: varchar
+        tests: [unique, not_null]
+      - name: competitor_consensus
+        data_type: bigint
+      - name: links_to_sigma
+        data_type: boolean
+      - name: links_to_hex
+        data_type: boolean
+      - name: links_to_mode
+        data_type: boolean
+      - name: links_to_metabase
+        data_type: boolean
+      - name: harmonic_pos
+        data_type: bigint
+      - name: pagerank_pos
+        data_type: bigint
+      - name: opportunity_score
+        data_type: double
+      - name: category
+        data_type: varchar
+      - name: opportunity_type
+        data_type: varchar
+      - name: rationale
+        data_type: varchar

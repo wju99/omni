@@ -1,0 +1,16 @@
+# Warehouse targets (spec B15). `dev` is the default: a local DuckDB
+# file, zero accounts, fully reproducible. `prod` is the documented
+# one-line MotherDuck swap (set MOTHERDUCK_TOKEN in the env) — the
+# shared/scheduled story, and the warehouse a hosted Omni instance
+# would actually connect to.
+omni_backlinks:
+  target: dev
+  outputs:
+    dev:
+      type: duckdb
+      path: data/omni.duckdb  # relative to repo root; invoke via make
+      threads: 4
+    prod:
+      type: duckdb
+      path: "md:omni_backlinks"
+      threads: 4

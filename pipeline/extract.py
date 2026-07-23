@@ -256,13 +256,23 @@ def _check_disk() -> None:
             "download + DuckDB tables. Free space and re-run.")
 
 
-def run(con) -> None:
-    """Runs the extract stage end to end (download + load)."""
+def run() -> None:
+    """Runs the extract stage end to end (download + load).
+
+    Opens and closes its own warehouse connection so no lock is held
+    once the stage returns (DuckDB allows a single writing process —
+    the next stage, dbt, opens its own).
+    """
     _check_disk()
-    if not download_all(con):
-        print("[extract] retrying failed chunks...")
+    con = db.connect()
+    try:
         if not download_all(con):
-            sys.exit("[extract] download chunks still failing after "
-                     "retry; re-run to resume from the manifest")
-    load_all(con)
-    _report_target_coverage(con)
+            print("[extract] retrying failed chunks...")
+            if not download_all(con):
+                sys.exit("[extract] download chunks still failing "
+                         "after retry; re-run to resume from the "
+                         "manifest")
+        load_all(con)
+        _report_target_coverage(con)
+    finally:
+        con.close()
