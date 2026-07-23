@@ -167,6 +167,8 @@ _Numbered stages = runtime data flow. Red nodes = the two flaky external seams; 
 
 **Our build (B12):** hand-write **one faithful Omni Topic** over the top-25 mart (can't connect Omni to a laptop DuckDB). Shape = **degenerate star / one wide mart** (one row per referring domain): dimensions `domain, category, opportunity_type, tld, authority_bucket`; measures `referring_domain_count, avg_authority, consensus`; opportunity **score** as a metric; a filter reproducing the top-25. Clean, well-named mart columns ⇒ better Omni model (Omni auto-generates from schema — reinforces B11 mart discipline).
 
+**Validation approach (LOCKED = A):** No live Omni instance by default (hosted Omni can't reach a local DuckDB file). Validity rests on: (1) the dbt marts the model sits on are runnable + **tested** (objective data validation); (2) model-as-code grounded in Omni's real syntax — the reviewers are Omni; (3) each measure/dimension carries its **equivalent SQL** for line-by-line audit against the marts; (4) optional CI lint if Omni ships a validator. **Stretch (B — time-permitting):** connect a free Omni instance to **MotherDuck** (B15), import the model, and screenshot it loading + returning the top-25.
+
 **Build-time:** pull Omni's exact modeling YAML syntax from docs — do **not** hand-write from memory. Refs: `docs.omni.co/modeling`, `/modeling/develop/model-generation`, `/integrations/dbt/semantic-layer`.
 
 ---
@@ -187,6 +189,7 @@ Scoping complete (B1–B16). Proposed build order:
 - **dbt structure (B11)** — user has limited dbt exposure; hands-on pass on models/tests/contracts, teach-as-we-go.
 - **Omni model (B12)** — pull Omni's exact modeling YAML from docs at build; don't hand-write from memory.
 - **CC webgraph path (§3 TODO)** — confirm exact release download slug/URL before Extract.
+- **Stretch (time-permitting):** live Omni import via MotherDuck for screenshot proof (validation B).
 
 ---
 
