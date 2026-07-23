@@ -64,7 +64,7 @@ make run
 ```
 
 Classifies only *uncached* shortlist domains with `claude-haiku-4-5`
-(structured outputs, `temperature=0`). Full regeneration of ~150
+(structured outputs, `temperature=0`). Full regeneration of 150
 domains costs **~$0.10–0.50, one-time** (cache-by-domain thereafter).
 
 ## Pipeline stages & commands
