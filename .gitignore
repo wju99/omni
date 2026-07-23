@@ -1,0 +1,48 @@
+# Local Claude Code instructions (machine-specific — do not commit)
+CLAUDE.local.md
+
+# VSCode Local History extension
+.history/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.ipynb_checkpoints/
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+
+# DuckDB warehouse (build artifact — reproducible)
+*.duckdb
+*.duckdb.wal
+*.db
+
+# dbt
+target/
+dbt_packages/
+logs/
+
+# Raw data / Common Crawl downloads (large, reproducible)
+data/
+downloads/
+*.parquet
+*.warc*
+*.wat*
+*.wet*
+*.gz
+
+# OS
+.DS_Store
+Thumbs.db
