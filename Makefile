@@ -4,7 +4,7 @@
 -include .env
 export
 
-.PHONY: setup init status extract transform enrich reclassify run test clean-db
+.PHONY: setup init status extract transform enrich reclassify report run test clean-db
 
 setup:      ## Install pinned dependencies into .venv (requires uv).
 	uv sync
@@ -29,6 +29,9 @@ reclassify: ## Wipe the LLM cache and re-classify from scratch (~$0.15).
 	con.execute('DELETE FROM enrich.domain_enrichment'); \
 	con.close(); print('enrichment cache table wiped')"
 	uv run python -m pipeline enrich
+
+report:     ## Write top-25 CSV + Markdown artifacts.
+	uv run python -m pipeline report
 
 status:     ## Show manifest progress and warehouse tables.
 	uv run python -m pipeline status

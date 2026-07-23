@@ -23,7 +23,7 @@ Full design rationale, decision log, and contracts:
 | ETL framework + code | [`pipeline/`](pipeline/) (Python: extract, transform, enrich stages + retry manifest) |
 | dbt project | [`dbt/`](dbt/) (staging → intermediate → marts; tests + enforced contract) |
 | Omni semantic model | *lands in build step 6 — see spec §9* |
-| Top-25 report | *lands in build step 5 — see spec §9* (will be committed under `artifacts/`) |
+| Top-25 report | [`artifacts/REPORT.md`](artifacts/REPORT.md) (human) + [`artifacts/top_25_report.csv`](artifacts/top_25_report.csv) (machine) |
 | Tech Spec | [`TECH_SPEC_DRAFT.md`](TECH_SPEC_DRAFT.md) |
 
 ## Prerequisites
@@ -149,7 +149,7 @@ TECH_SPEC_DRAFT.md   decision log + contracts + tradeoffs + recovery semantics
 
 ## Status
 
-Build steps 1–4 (scaffold, extract, dbt, enrich) are complete; the
-top-25 report, Omni semantic model, and scheduling stub land in steps
-5–7 — tracked in [TECH_SPEC_DRAFT.md](TECH_SPEC_DRAFT.md) §9. This
+Build steps 1–5 (scaffold, extract, dbt, enrich, report) are
+complete; the Omni semantic model and scheduling stub land in steps
+6–7 — tracked in [TECH_SPEC_DRAFT.md](TECH_SPEC_DRAFT.md) §9. This
 README is finalized at wrap.

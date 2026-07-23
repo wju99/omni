@@ -17,9 +17,8 @@ from pipeline import config
 from pipeline import db
 from pipeline import enrich
 from pipeline import extract
+from pipeline import report
 from pipeline import transform
-
-_NOT_IMPLEMENTED = "not implemented yet (build plan: TECH_SPEC_DRAFT §9)"
 
 
 def _finalize() -> None:
@@ -27,14 +26,14 @@ def _finalize() -> None:
     transform.run(select="top_backlink_opportunities+")
 
 
-# Ordered stages of one pipeline run. Entries become callables as
-# each build step lands: report (step 5).
+# Ordered stages of one pipeline run; each opens/closes its own
+# warehouse connection (DuckDB single-writer).
 _STAGES = (
     ("extract", extract.run),
     ("transform", transform.run),
     ("enrich", enrich.run),
     ("finalize", _finalize),
-    ("report", None),
+    ("report", report.run),
 )
 
 
@@ -92,12 +91,14 @@ def cmd_reset(args: argparse.Namespace) -> None:
     con.close()
 
 
+def cmd_report(_args: argparse.Namespace) -> None:
+    """Regenerates the report artifacts on their own."""
+    report.run()
+
+
 def cmd_run(_args: argparse.Namespace) -> None:
     """Runs all pipeline stages in order (idempotent, resumable)."""
     for name, stage_fn in _STAGES:
-        if stage_fn is None:
-            print(f"[run] {name}: {_NOT_IMPLEMENTED}")
-            continue
         print(f"[run] {name}: start", flush=True)
         stage_fn()
         print(f"[run] {name}: done", flush=True)
@@ -133,6 +134,9 @@ def main(argv=None) -> None:
         "enrich",
         help="classify shortlist with Claude (DRY RUN without key)",
     ).set_defaults(func=cmd_enrich)
+    sub.add_parser(
+        "report", help="write top-25 CSV + Markdown artifacts"
+    ).set_defaults(func=cmd_report)
     reset = sub.add_parser(
         "reset", help="clear manifest rows for a stage (forces redo)"
     )
