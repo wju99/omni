@@ -77,8 +77,12 @@ _FUNNEL_SQL = """
             as after_filters,
         (select count(*) from marts.enrichment_shortlist)
             as shortlisted,
-        (select count(*) from enrich.domain_enrichment
-            where is_relevant) as judged_relevant,
+        (select count(*)
+            from enrich.domain_enrichment as llm
+            left join seeds.enrichment_overrides as overrides
+                on llm.domain = overrides.domain
+            where coalesce(overrides.is_relevant, llm.is_relevant))
+            as judged_relevant,
         (select count(*) from marts.top_backlink_opportunities)
             as final_recommendations
 """
@@ -94,7 +98,10 @@ _EXCLUSIONS_SQL = """
     from marts.backlink_opportunities as opportunities
     inner join enrich.domain_enrichment as enrichment
         on opportunities.domain = enrichment.domain
-    where not enrichment.is_relevant
+    left join seeds.enrichment_overrides as overrides
+        on opportunities.domain = overrides.domain
+    where not coalesce(overrides.is_relevant,
+                       enrichment.is_relevant)
     order by opportunities.harmonic_pos asc, opportunities.domain
     limit 6
 """
@@ -173,8 +180,8 @@ def _render_md(top, footprint, funnel, exclusions) -> str:
     out(f"4. **{f:,}** after deterministic filters (junk TLDs,"
         " platform wildcards, mega-platforms, authority floor)")
     out(f"5. **{s:,}** shortlisted by consensus × authority score")
-    out(f"6. **{r:,}** judged relevant outreach targets by the"
-        " LLM relevance gate")
+    out(f"6. **{r:,}** judged relevant outreach targets (LLM"
+        " relevance gate + human-verified overrides)")
     out(f"7. **{t:,}** final recommendations below")
     out("")
     out("**Score** = weighted blend of *competitor consensus* (how"

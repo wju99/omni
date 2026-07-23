@@ -1,0 +1,31 @@
+version: 2
+
+seeds:
+  - name: excluded_domains
+    description: >
+      Structural exclusions — mega-platforms, blog/PaaS wildcard
+      hosts, utilities. Seeds handle structure; the LLM handles
+      content judgment.
+    columns:
+      - name: domain
+        tests: [unique, not_null]
+
+  - name: excluded_tlds
+    description: Spam-heavy TLDs excluded outright.
+    columns:
+      - name: tld
+        tests: [unique, not_null]
+
+  - name: enrichment_overrides
+    description: >
+      Human-verified relevance verdicts that beat the LLM cache in
+      the top mart (coalesce(override, llm)). Add a row ONLY after
+      manually verifying the domain — this is a record of
+      verifications, not a second opinion. Reason is mandatory.
+    columns:
+      - name: domain
+        tests: [unique, not_null]
+      - name: is_relevant
+        tests: [not_null]
+      - name: reason
+        tests: [not_null]

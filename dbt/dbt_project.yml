@@ -31,3 +31,6 @@ models:
 seeds:
   omni_backlinks:
     +schema: seeds
+    enrichment_overrides:
+      +column_types:
+        is_relevant: boolean
