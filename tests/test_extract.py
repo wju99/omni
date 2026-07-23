@@ -23,3 +23,19 @@ def test_chunk_plan_covers_file_exactly():
     assert plan[-1][2] == total - 1
     covered = sum(end - start + 1 for _, start, end in plan)
     assert covered == total
+
+
+def test_downloaded_bytes_counts_only_done_chunks(tmp_path):
+    from pipeline import db
+    con = db.connect(tmp_path / "t.duckdb")
+    db.claim(con, "download", "vertices:00000")
+    db.mark_done(con, "download", "vertices:00000", detail="100")
+    db.claim(con, "download", "vertices:00001")
+    db.mark_done(con, "download", "vertices:00001", detail="50")
+    db.claim(con, "download", "vertices:00002")  # in_progress
+    db.claim(con, "download", "edges:00000")
+    db.mark_done(con, "download", "edges:00000", detail="999")
+    assert extract._downloaded_bytes(con, "vertices") == 150
+    assert extract._downloaded_bytes(con, "edges") == 999
+    assert extract._downloaded_bytes(con, "ranks") == 0
+    con.close()

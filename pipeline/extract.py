@@ -29,7 +29,8 @@ from pipeline import db
 
 CHUNK_BYTES = 64 * 1024 * 1024   # Ranged-download unit (64 MiB).
 _IO_BYTES = 4 * 1024 * 1024      # Streaming copy buffer.
-_MIN_FREE_BYTES = 25 * 1024**3   # Refuse to start without headroom.
+_MIN_FREE_BYTES = 2 * 1024**3    # Bare workspace floor (resume path).
+_DISK_BUFFER_BYTES = 7 * 1024**3  # DuckDB tables + working headroom.
 _TIMEOUT = (10, 120)             # (connect, read) seconds.
 
 
@@ -99,6 +100,15 @@ def download_file(con, name: str) -> bool:
     path = _local_path(name)
     path.parent.mkdir(parents=True, exist_ok=True)
     _preallocate(path, size)
+    # Disk guard on what is actually LEFT to fetch (a resumed or
+    # re-run download with all chunks done needs no headroom —
+    # found via reviewer-workflow replication).
+    remaining = size - _downloaded_bytes(con, name)
+    if remaining > 0:
+        _require_free(
+            remaining + _DISK_BUFFER_BYTES,
+            f"downloading {name} "
+            f"({remaining / 1024**3:.1f} GiB remaining)")
     failed = 0
     # disable=None auto-hides the bar when not attached to a TTY
     # (e.g. background runs); the periodic prints below cover logs.
@@ -246,14 +256,31 @@ def _report_target_coverage(con) -> None:
                  "analysis impossible; investigate before continuing")
 
 
-def _check_disk() -> None:
-    config.DATA_DIR.mkdir(parents=True, exist_ok=True)
+def _downloaded_bytes(con, name: str) -> int:
+    """Returns bytes already fetched for a file, per the manifest."""
+    row = con.execute(
+        "SELECT coalesce(sum(cast(detail AS BIGINT)), 0) "
+        "FROM pipeline_manifest "
+        "WHERE release = ? AND stage = 'download' "
+        "AND unit LIKE ? AND status = 'done'",
+        [config.RELEASE, f"{name}:%"],
+    ).fetchone()
+    return int(row[0])
+
+
+def _require_free(needed: int, context: str) -> None:
+    """Aborts unless the data volume has `needed` bytes free."""
     free = shutil.disk_usage(config.DATA_DIR).free
-    if free < _MIN_FREE_BYTES:
+    if free < needed:
         sys.exit(
             f"[extract] only {free / 1024**3:.1f} GiB free; need "
-            f"~{_MIN_FREE_BYTES / 1024**3:.0f} GiB for the webgraph "
-            "download + DuckDB tables. Free space and re-run.")
+            f"~{needed / 1024**3:.1f} GiB for {context}. "
+            "Free space and re-run.")
+
+
+def _check_disk() -> None:
+    config.DATA_DIR.mkdir(parents=True, exist_ok=True)
+    _require_free(_MIN_FREE_BYTES, "pipeline workspace")
 
 
 def run() -> None:
