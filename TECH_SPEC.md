@@ -1,6 +1,6 @@
 # Omni Growth Engineering Take-Home — Tech Spec
 
-> **Status: COMPLETE.** All 7 build steps shipped. Map: §2 locked scope decisions · §6 reproducibility/retry/scheduling · §7 implicit & explicit contracts · §8 Omni model · §9 build log (with the LLM iteration story) · §10 week priorities · §11 out of scope · §12 deliverables. This document is Deliverable #5.
+> **Status: COMPLETE.** Map: §2 design decisions & tradeoffs (locked, with rejected alternatives) · §6 recovery semantics · §7 implicit & explicit contracts · §8 Omni model · §9 week priorities · §10 out of scope · §11 deliverables. This document is Deliverable #5.
 
 ---
 
@@ -136,28 +136,20 @@ _Numbered stages = runtime data flow. Red nodes = the two flaky external seams; 
 
 ---
 
-## 6. Reproducibility, retry & scheduling (LOCKED — B9/B10)
+## 6. Recovery semantics
 
-**Two flaky external seams** (everything between is deterministic dbt SQL, idempotent by construction):
-1. **S3 webgraph download** — large, possibly sharded files that can fail partway.
-2. **~150 LLM enrichment calls** — transient 5xx / rate limits.
+**Two flaky external seams** — everything between them is deterministic dbt SQL, idempotent by construction:
+1. **Webgraph download** — 17.9 GB over HTTP, fetched in 64 MiB byte-range chunks.
+2. **LLM enrichment calls** — ≤150 requests that can rate-limit or 5xx.
 
-**Retry / recovery design (B9 — real minimal manifest + demonstrable resume):**
-- `pipeline_manifest` table in DuckDB keyed by `(release, stage, unit)` → `status / attempts / updated_at`. Extract **claims-a-row** per shard before working, marks `done` after; re-runs skip `done` units.
-- LLM enrichment **cache-by-domain** table doubles as its checkpoint (a domain already classified is never re-called).
-- **Backoff-with-retry only on the LLM calls** (the one seam that genuinely rate-limits); extract simply retries the failed shard.
-- Kill the run mid-flight → re-invoke → it resumes. This is the demonstrable "recovery semantics" the brief grades.
+**One mechanism covers both — `pipeline_manifest`** (PK `(release, stage, unit)`; lifecycle `pending → in_progress → done / failed`; `attempts` counted):
+- A unit **claims its row** before work and marks `done` after; re-runs skip `done`, so an interrupted run resumes at the first incomplete unit. `failed` and orphaned `in_progress` rows stay claimable.
+- **Download unit = one chunk**, written at its byte offset into a preallocated sparse file (`Accept-Ranges` verified, §3). The disk guard gates on *remaining* undownloaded bytes computed from manifest records — a resume needs no download headroom.
+- **Enrichment unit = one domain**; the cache table (PK domain, upserts) doubles as the checkpoint — a classified domain is never re-called. In-flight transport backoff is delegated to the SDK (`max_retries=5`); cross-run retry is the manifest's job.
+- **Everything else needs no bookkeeping**: loads and dbt models are `CREATE OR REPLACE` over deterministic inputs; each stage opens/closes its own connection (DuckDB single-writer), and a dead process releases the lock.
+- **Scheduling composes with recovery** (B10): the committed cron re-invokes the idempotent CLI — a failed scheduled run's recovery procedure *is* the next run.
 
-**Scheduling (B10 — idempotent entrypoint + committed cron stub):**
-- Single entrypoint `python -m pipeline run --release cc-main-2026-apr-may-jun`, safe to re-run.
-- Committed **GitHub Actions `schedule:` cron** (or Makefile target) re-invokes it on cadence. A failed run is just re-run; the manifest skips completed work. No orchestrator, no infra.
-- Target = local `.duckdb` (dev) or **MotherDuck** (shared/scheduled prod).
-
-**LLM reproducibility:** structured outputs (`json_schema`) for shape; `temperature=0` (works on Haiku 4.5 — NOTE: Sonnet 5 rejects non-default sampling → would rely on caching only); cache-to-table so re-runs don't re-call; Batch API (50% off) optional since scheduled/non-latency-sensitive.
-
-**Cost:** ~$0.10–0.50/run Haiku (vs ~$0.35–1.50 Sonnet) at ~150–300 shortlist calls; effectively one-time due to caching. Non-issue.
-
-**Keyless review & DRY RUN (design added at build):** the enrichment cache doubles as the reproducibility snapshot. After a live run it is exported — sorted by domain, with `model` + `enriched_at` provenance columns — to **committed** `artifacts/enrichment_cache.csv`. Running `enrich` without `ANTHROPIC_API_KEY` prints an explicit, loud **DRY RUN** banner, makes zero API calls, and bootstraps the cache table from the committed CSV — so the full pipeline reproduces end-to-end with **no credentials at all**. Review tiers: (1) read the committed report artifacts; (2) keyless full re-run from the committed cache; (3) regenerate classifications with your own key (`temperature=0` + pinned model + `json_schema` ⇒ near-deterministic). LLM outputs are treated as **data with provenance** — versioned, diffable in git — mirroring the team's "LLM enrichment → raw outputs → dbt" pattern.
+**Proven, not asserted:** SIGTERM mid-download left 9/36 chunks `done` + 1 `in_progress`; a plain re-run completed the file, and the interrupted chunk permanently reads `attempts = 2` — the manifest doubles as the forensic record of every crash.
 
 ---
 
@@ -200,40 +192,15 @@ Every stage boundary is either **explicit** (machine-enforced; violation fails t
 
 **Our build (B12):** hand-write **one faithful Omni Topic** over the top-25 mart (can't connect Omni to a laptop DuckDB). Shape = **degenerate star / one wide mart** (one row per referring domain): dimensions `domain, category, opportunity_type, tld, authority_bucket`; measures `referring_domain_count, avg_authority, consensus`; opportunity **score** as a metric; a filter reproducing the top-25. Clean, well-named mart columns ⇒ better Omni model (Omni auto-generates from schema — reinforces B11 mart discipline).
 
-**Validation approach (LOCKED = A):** No live Omni instance by default (hosted Omni can't reach a local DuckDB file). Validity rests on: (1) the dbt marts the model sits on are runnable + **tested** (objective data validation); (2) model-as-code grounded in Omni's real syntax — the reviewers are Omni; (3) each measure/dimension carries its **equivalent SQL** for line-by-line audit against the marts; (4) optional CI lint if Omni ships a validator. **Stretch (B): deliberately not pursued** — a live Omni instance connected to MotherDuck with import screenshots remains the strongest possible proof, but validation A stands on its own; now §10 priority 3 instead of half-shipping it.
+**Validation approach (LOCKED = A):** No live Omni instance by default (hosted Omni can't reach a local DuckDB file). Validity rests on: (1) the dbt marts the model sits on are runnable + **tested** (objective data validation); (2) model-as-code grounded in Omni's real syntax — the reviewers are Omni; (3) each measure/dimension carries its **equivalent SQL** for line-by-line audit against the marts; (4) optional CI lint if Omni ships a validator. **Stretch (B): deliberately not pursued** — a live Omni instance connected to MotherDuck with import screenshots remains the strongest possible proof, but validation A stands on its own; now §9 priority 3 instead of half-shipping it.
 
 **Build-time:** pull Omni's exact modeling YAML syntax from docs — do **not** hand-write from memory.
 
-**✅ BUILT (step 6):** `omni/` — `views/top_backlink_opportunities.view` (14 dimensions incl. derived `tld` + `authority_bucket`; 5 measures incl. a filtered measure; `primary_key`, `group_label`, `format`, `ai_context` — every parameter verified against Omni's parameter references) + `topics/backlink_opportunities.topic` (`base_view`, `default_row_limit: 25`, curated `fields`, AI context) + `omni/README.md` (three-layer mapping, MotherDuck connect path, live-verified equivalent-SQL audit table). YAML validity + audit SQL verified against the warehouse (25 rows · avg score 0.534 · 17 integrations-page motions). Refs: `docs.omni.co/modeling`, `/modeling/develop/model-generation`, `/integrations/dbt/semantic-layer`.
+**✅ BUILT:** `omni/` — `views/top_backlink_opportunities.view` (14 dimensions incl. derived `tld` + `authority_bucket`; 5 measures incl. a filtered measure; `primary_key`, `group_label`, `format`, `ai_context` — every parameter verified against Omni's parameter references) + `topics/backlink_opportunities.topic` (`base_view`, `default_row_limit: 25`, curated `fields`, AI context) + `omni/README.md` (three-layer mapping, MotherDuck connect path, live-verified equivalent-SQL audit table). YAML validity + audit SQL verified against the warehouse (25 rows · avg score 0.534 · 17 integrations-page motions). Refs: `docs.omni.co/modeling`, `/modeling/develop/model-generation`, `/integrations/dbt/semantic-layer`.
 
 ---
 
-## 9. NEXT STEPS — BUILD (scope fully locked)
-
-Scoping complete (B1–B16). Proposed build order:
-
-1. ✅ **Scaffold** — DONE: `pipeline/` package (config · db + manifest · CLI), `pyproject` + `uv.lock` (Python pinned 3.12 for dbt compat), Makefile, `.env.example`, manifest tests green. Found: DuckDB rejects bare `current_timestamp` inside `ON CONFLICT DO UPDATE SET` → use `now()`.
-2. ✅ **Extract + Load** — DONE 2026-07-22: 17.9 GB in 64 MiB manifest-tracked chunks; loads: vertices **121,091,933** · ranks **121,091,933** · target_edges **4,925** (≈2B-edge streaming scan, 141 s) · target coverage all 6 domains OK.
-3. ✅ **dbt** — DONE: **40/40 nodes green** (incl. thesis test). Observed: referrers metabase 1,809 / mode 1,242 / hex 838 / sigma 738 / **omni 265** (≈1/7th of Metabase — the headline stat); funnel 4,023 unique referrers → 3,758 raw gap → **3,008** after filters; consensus histogram 31×4 / 73×3 / 243×2 / 2,664×1; pre-enrichment top-25 = modern-data-stack ecosystem (YC, Fivetran, Airbyte, Atlan, Monte Carlo…) + visible aggregator junk → validates the LLM relevance gate (31 consensus-4 domains > 25 slots). Seed tweak: PaaS wildcard hosts (herokuapp/netlify.app/vercel.app/web.app/pages.dev) excluded — principle: seeds = structural exclusions, LLM = content judgment.
-4. ✅ **Enrich** — DONE (two prompt iterations, both cached runs committed → diffable):
-   - **v1** (150/150, 0 failures, 78 relevant / 72 cut): killed junk correctly but **improvised the competitor boundary** — wrongly rejected ELT partners `fivetran.com`/`airbyte.com` as "competitors" while keeping equivalent vendors. Root cause: prompt never defined the competitor set.
-   - **v2** (strict closed competitor list `config.BI_COMPETITORS` + partner rule + firmer farm rule): **29 verdict flips** — ELT partners restored (fivetran, airbyte, stitchdata → relevant), all borderline stats/listicle farms killed (worldmetrics, statspresso, dataslayer, inven…), 63 relevant / 87 cut. Final top-25: 22/25 rows are integrations/directory/press motions incl. dbta.com, berkeley.edu (rank 123), cube.dev, open-metadata.org.
-   - **Known residuals (documented, accepted):** (1) Haiku violated the closed list twice in 150 (`coda.io`, `atlassian.com` labeled `competitor_bi_platform` though unlisted) → 98.7% rule compliance; deterministic post-check infeasible without a company→domain map (future work). (2) `montecarlo.ai` / `montecarlodata.com` entity dup — dedupe is future work; visible in report. (3) `ycombinator.com` (≈ Hacker News at domain grain), `a16z.com`, `apache.org` (≈ ASF/Superset pages) cut on outreach-actionability grounds — defensible, noted for the report's insights section.
-   - **v2.1 (INVESTOR RULE) + regression gate + human overrides:** a human spot-check caught `bvp.com` framed as a submittable directory — verified its competitor links come from BVP's *Atlas* editorial market reports (VCs link via portfolio pages or editorial lists; neither is outreachable). v2.1 added the INVESTOR RULE; a **regression gate with invariants committed before the run** then caught three violations: (1) `stitchdata.com` re-killed as competitor — **correct**: Qlik owns Stitch via Talend (2023), a two-hop ownership chain the model traced and our own invariant missed (the closed list outperformed the gate's author); (2–3) real churn — `montecarlodata.com` (a partner *named in the prompt*) flipped irrelevant and farm `gitnux.org` resurrected. Measured lesson: **one added prompt rule → 18 verdict flips at temperature 0** (borderline rows re-roll on any prompt change; the rule also over-generalized to analyst firms/OSS docs — `infotech`, `duckdb.org`, `trino.io`). Architectural answer, not more prompting: **`enrichment_overrides` dbt seed** — human-verified verdicts coalesce over LLM verdicts in the top mart (LLM proposes, humans dispose, both versioned in git; reason column mandatory; rows added only after manual verification). Final state: cache-level gate **PASS**, mart-level gate **PASS** (25 rows; `montecarlodata` restored by override; `bvp`/`gitnux`/`stitchdata` out).
-5. ✅ **Publish** — DONE: `report.py` → committed `artifacts/top_25_report.csv` + `artifacts/REPORT.md` (footprint table w/ 1/7-of-Metabase headline, 7-step funnel, 25 rows w/ rationale + playbook action, auto-generated "notable deliberate exclusions" table (amazonaws/spotify/stripe/nih cut with reasons), insights + limitations). Actions derive **deterministically** from `opportunity_type` (LLM never writes advice); **no wall-clock timestamps** → byte-identical re-runs.
-6. ✅ **Omni model** — DONE: one faithful view + topic in Omni's model-IDE file layout (`omni/views/*.view`, `omni/topics/*.topic`), all syntax grounded in docs.omni.co parameter references; YAML-validated; equivalent-SQL audit runs live against the warehouse (see `omni/README.md` and §8).
-7. ✅ **Wrap** — DONE: committed GH Actions **monthly `schedule:` cron** (`.github/workflows/pipeline.yml`) — schedule real but **gated behind a repo variable** (`PIPELINE_SCHEDULE_ENABLED`): honest about GitHub-hosted runner disk (~14 GB) vs. the 18 GB download; enable on a self-hosted runner or with the MotherDuck target. Manual `workflow_dispatch` always available; `ANTHROPIC_API_KEY` optional secret (DRY RUN without); report artifacts uploaded per run. README finalized; spec retitled `TECH_SPEC.md` + delivery statement (§12).
-8. ✅ **Post-ship reviewer replication (2026-07-23):** ran the README validation checklist end-to-end, keyless (`.env` removed), exactly as a reviewer would. **Caught and fixed a real bug:** the disk guard demanded full-download headroom (25 GiB) even on a resume with all chunks complete — it now gates on *remaining* undownloaded bytes per file (computed from manifest chunk records) plus a working buffer, unit-tested. Kill-and-resume exercised **for real**: SIGTERM mid-download left 9/36 ranks chunks `done` + 1 `in_progress`; a plain re-run completed the file, and the interrupted chunk permanently shows `attempts = 2` in the manifest — a forensic trail of the crash. All six checklist steps green; committed artifacts byte-identical throughout. *(Demo-harness footnotes, for honesty: POSIX shells start `&`-children with SIGINT ignored → use SIGTERM; kill the python worker, not the `uv` wrapper; CloudFront edge-caches re-fetched ranges at ~500 MB/s, so interrupt windows are tiny on re-downloads.)*
-
-**Build-time deep-dives flagged:**
-- **dbt structure (B11)** — user has limited dbt exposure; hands-on pass on models/tests/contracts, teach-as-we-go.
-- **Omni model (B12)** — pull Omni's exact modeling YAML from docs at build; don't hand-write from memory.
-- ✅ **CC webgraph path** — verified via HEAD 2026-07-22 (see §3): all three files live, ~17.9 GB total gz, byte-ranges supported.
-- **Stretch (validation B — live Omni import via MotherDuck):** deliberately not pursued at wrap; see §8 and §10 priority 3.
-
----
-
-## 10. If I had a week — priorities
+## 9. If I had a week — priorities
 
 1. **LLM experimentation — prompt & sampling.** Treat the classifier as a tunable component: systematic prompt variants and sampling settings run against the full shortlist, measured with the harness this repo already ships — committed cache versions, diffable verdict flips, and the pre-committed regression gate. Goal: quantified verdict stability (flip rate per prompt change) and closing the residual misreads (`coda.io`, `atlassian.com`) by measurement rather than case-patching.
 2. **Wire the prototype to the cloud.** Provision a real AWS sandbox with actual resources: the pipeline image in **ECR**, runs invoked via **Lambda** on the schedule, **artifacts persisted to S3** instead of local-only, and **MotherDuck** as the shared warehouse (already a one-line dbt target swap). Same code and retry semantics — the manifest design carries over unchanged; only the storage/compute bindings move.
@@ -241,7 +208,7 @@ Scoping complete (B1–B16). Proposed build order:
 
 ---
 
-## 11. Out of scope (MVP)
+## 10. Out of scope (MVP)
 
 - **Monitoring** — no metrics, alerting, or run-health dashboards; failures surface as exit codes + manifest state.
 - **Evals** — no automated evaluation harness for the LLM classifier beyond the regression gate and human spot-checks.
@@ -250,7 +217,7 @@ Scoping complete (B1–B16). Proposed build order:
 
 ---
 
-## 12. Delivery statement — the deliverables
+## 11. Delivery statement — the deliverables
 
 1. **ETL framework + code** — `pipeline/`: chunked resumable extract (manifest-checkpointed 64 MiB ranges over 17.9 GB), filtered load (2B edges → 4,925), bounded cached LLM enrichment, deterministic report stage; idempotent CLI throughout.
 2. **dbt project** — `dbt/`: 3 layers, 9 models, 37 tests (incl. the no-gap-domain-links-to-Omni thesis test), enforced 12-column contract on the deliverable mart, 3 seeds (structural exclusions + human overrides).

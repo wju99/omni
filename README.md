@@ -210,8 +210,10 @@ works as-is.
 
 ## Status
 
-**Complete.** All seven build steps and all six brief deliverables
-are shipped; the full build log — including the LLM prompt
-iteration story (v1 → v2 → v2.1, regression gate, human overrides)
-— is in [TECH_SPEC.md](TECH_SPEC.md) §9; deliverables in §12,
-if-I-had-a-week priorities in §10, out of scope in §11.
+**Complete.** All six brief deliverables are shipped. The LLM
+prompt iteration story (v1 → v2 → v2.1, regression gate, human
+overrides) lives in the git history of
+`artifacts/enrichment_cache.csv`. See [TECH_SPEC.md](TECH_SPEC.md)
+for design decisions (§2), recovery semantics (§6), contracts (§7),
+if-I-had-a-week priorities (§9), out of scope (§10), and
+deliverables (§11).

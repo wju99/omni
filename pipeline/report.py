@@ -6,7 +6,7 @@ Writes two committed artifacts from the contracted mart:
 
 Deterministic by design: all content derives from warehouse tables
 and pinned config — no wall-clock timestamps — so re-runs on the
-same data are byte-identical (reproducibility, spec §6).
+same data are byte-identical (see README, "Validating the system").
 """
 
 import csv
