@@ -87,41 +87,82 @@ Every command is idempotent — safe to re-run, safe to schedule.
 
 ## Validating the system (reviewer checklist)
 
-**1. Unit tests** — `make test`: manifest claim/resume semantics,
-download chunk planning, enrichment-cache round-trip.
+Ordered to mirror an actual review — from zero-setup reading to
+adversarial poking.
 
-**2. Data tests & contracts** — `make transform` runs 29 dbt checks,
-including:
-- the **thesis test**: no domain in the gap set links to Omni
-  (`dbt/tests/assert_no_gap_domain_links_to_omni.sql`)
-- an **enforced model contract** on `top_backlink_opportunities`
-  (12 typed columns — schema drift fails the build)
-- uniqueness/nullability on every layer's keys
+**1. Read the deliverable (no setup)** —
+[artifacts/REPORT.md](artifacts/REPORT.md): the top-25 with
+per-domain rationale + suggested action, the auditable funnel, and
+the deliberate-exclusions table. Every step below exists so you can
+distrust-and-verify this file.
 
-**3. Retry & recovery semantics (spec B9)** — kill any stage
-mid-flight (`Ctrl-C` during the download is the dramatic one), then
-`make run`: the manifest resumes at the first incomplete unit.
-Inspect with `make status`; force a redo with
-`uv run python -m pipeline reset <stage>`.
-
-**4. Reproducibility** — pinned crawl release ID · pinned deps
-(`uv.lock`, committed) · pinned model ID + `temperature=0` +
-JSON-schema-enforced output shape · committed enrichment cache with
-`model`/`enriched_at` provenance. Two runs from a clean clone produce
-the same top-25.
-
-**5. Inspect the warehouse directly**
+**2. Reproduce it byte-for-byte (no credentials)**
 
 ```bash
-uv run python -c "
-import duckdb
-con = duckdb.connect('data/omni.duckdb', read_only=True)
-print(con.execute('''
-    select domain, competitor_consensus, harmonic_pos,
-           round(opportunity_score, 3) as score
-    from marts.backlink_opportunities
-    order by opportunity_score desc limit 10''').fetchall())"
+make setup && make run    # keyless: enrich runs as a loud DRY RUN
+git status artifacts/     # clean = the committed report is exactly
+                          # what the pipeline emits
 ```
+
+Reproducibility pins: crawl release ID · `uv.lock` · pinned model ID
++ `temperature=0` + JSON-schema outputs · committed enrichment cache
+with `model`/`enriched_at` provenance.
+
+**3. Manually audit any report row** — every claim in REPORT.md is
+one query away. Pick a domain and trace it end to end (mart row →
+link evidence → gap proof → independent authority check → score
+recomputation → LLM verdict):
+
+```bash
+DOMAIN=fivetran.com uv run python -c "
+import os, duckdb
+d = os.environ['DOMAIN']
+con = duckdb.connect('data/omni.duckdb', read_only=True)
+q = lambda sql: con.execute(sql, [d]).fetchall()
+print('mart row :', q('''select competitor_consensus, harmonic_pos,
+    round(opportunity_score, 3), category, opportunity_type
+    from marts.top_backlink_opportunities where domain = ?'''))
+print('links to :', q('''select list(distinct competitor)
+    from intermediate.int_referring_domain_links
+    where domain = ?'''))
+print('gap proof:', q('''select not links_to_omni
+    from intermediate.int_domain_signals where domain = ?'''))
+print('raw rank :', q('''select ranks.harmonic_pos
+    from raw.ranks as ranks
+    join intermediate.int_domain_signals as signals
+        using (domain_rev)
+    where signals.domain = ?'''))
+print('score recomputes:', q('''select round(
+    0.5 * (1.0 / log10(harmonic_pos + 10))
+    + 0.5 * (competitor_consensus / 4.0), 3)
+    from marts.top_backlink_opportunities where domain = ?'''))
+print('llm cache:', q('''select is_relevant, category, model
+    from enrich.domain_enrichment where domain = ?'''))
+"
+```
+
+The funnel numbers in REPORT.md are each a `count(*)` on the tables
+named in [pipeline/report.py](pipeline/report.py). The LLM verdict
+history is `git log -p artifacts/enrichment_cache.csv` (prompt
+v1 → v2 → v2.1, every flip diffable), and human overrides live in
+[dbt/seeds/enrichment_overrides.csv](dbt/seeds/enrichment_overrides.csv).
+
+**4. Data tests & contracts** — these already ran inside `make run`;
+rerun standalone with `make transform`: 49 dbt nodes green (3 seeds,
+9 models, 37 tests), including the **thesis test** — no gap domain
+links to Omni
+(`dbt/tests/assert_no_gap_domain_links_to_omni.sql`) — and an
+**enforced 12-column contract** on `top_backlink_opportunities`
+(schema drift fails the build).
+
+**5. Attack retry & recovery (spec B9)** — kill any stage mid-flight
+(`Ctrl-C` during the download is the dramatic one), then `make run`:
+the manifest resumes at the first incomplete unit. Inspect with
+`make status`; force a redo with
+`uv run python -m pipeline reset <stage>`.
+
+**6. Unit tests** — `make test`: manifest claim/resume semantics,
+download chunk planning, enrichment-cache round-trip.
 
 ## Repo layout
 
